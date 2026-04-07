@@ -87,5 +87,17 @@ def control():
     else:
         return jsonify({"status": "error", "message": message}), 400
 
+@app.route('/api/logs')
+def get_logs():
+    unit = request.args.get('unit')
+    if unit not in SERVICES.values():
+        return jsonify({"status": "error", "message": "Invalid service"}), 400
+    try:
+        # Fetch last 50 lines of logs using journalctl
+        result = subprocess.run(['journalctl', '-u', unit, '-n', '50', '--no-pager'], capture_output=True, text=True, timeout=5)
+        return result.stdout
+    except Exception as e:
+        return str(e), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=80, debug=False)
