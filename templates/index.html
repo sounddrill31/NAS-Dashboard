@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MONO | NAS Dashboard</title>
+    <script src="/static/tailwind.min.js"></script>
+    <script src="/static/vue.global.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ["Space Mono", "monospace"],
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+        * { font-family: "Space Mono", monospace; }
+        body { background-color: #ffffff; color: #000000; }
+        .grid-lines {
+            background-size: 20px 20px;
+            background-image: linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+        }
+        .diagonal-stripes {
+            background-image: repeating-linear-gradient(45deg, #000, #000 2px, #fff 2px, #fff 4px);
+            opacity: 0.1;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <div id="app" v-cloak>
+        <!-- Navigation -->
+        <nav class="fixed w-full px-6 py-4 flex justify-between items-center z-50 bg-white border-b-2 border-black">
+            <div class="text-xl font-bold tracking-tighter">NASPEASY<span class="text-xs align-super">OS</span></div>
+            <div class="flex gap-8 text-xs font-bold uppercase tracking-widest">
+                <span>LOCAL: {% raw %}{{ localIp }}{% endraw %}</span>
+                <span>PUBLIC: {% raw %}{{ publicIp }}{% endraw %}</span>
+            </div>
+        </nav>
+
+        <main class="pt-24 px-6 pb-12 max-w-7xl mx-auto w-full grid grid-cols-1 md:grid-cols-12 gap-8">
+            <!-- Hero / Status -->
+            <header class="md:col-span-12 border-2 border-black p-8 relative overflow-hidden bg-black text-white">
+                <div class="absolute inset-0 diagonal-stripes"></div>
+                <div class="relative z-10">
+                    <h1 class="text-5xl md:text-7xl font-bold mb-2 leading-none uppercase tracking-tighter">
+                        SYSTEM<span class="text-xs align-super">CONTROL</span>
+                    </h1>
+                    <p class="text-sm max-w-md opacity-80 uppercase tracking-widest">
+                        Centralized management interface for NAS services and infrastructure.
+                    </p>
+                </div>
+            </header>
+
+            <!-- Services Grid -->
+            <section class="md:col-span-8 space-y-4">
+                <div class="flex justify-between items-end border-b-2 border-black pb-2">
+                    <h2 class="text-2xl font-bold uppercase tracking-tighter">SERVICES</h2>
+                    <button @click="fetchServices" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Refresh</button>
+                </div>
+
+                <div class="grid grid-cols-1 gap-2">
+                    <div v-for="(unit, name) in serviceMap" :key="unit" 
+                         class="border-2 border-black p-4 flex flex-col sm:flex-row items-center justify-between group hover:bg-black hover:text-white transition-colors">
+                        <div class="flex items-center gap-4 w-full">
+                            <div class="w-4 h-4 border-2 border-black group-hover:border-white shrink-0" 
+                                 :class="getStatusClass(services[unit])"></div>
+                            <div class="flex flex-col">
+                                <span class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ name }}{% endraw %}</span>
+                                <span class="text-[10px] opacity-60 uppercase">{% raw %}{{ unit }}{% endraw %}</span>
+                            </div>
+                            <div class="ml-auto sm:ml-4 text-[10px] font-bold border border-black group-hover:border-white px-2 py-0.5 uppercase">
+                                {% raw %}{{ services[unit] || '...' }}{% endraw %}
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-4 mt-4 sm:mt-0 w-full sm:w-auto">
+                            <button @click="controlService(unit, 'start')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors">Start</button>
+                            <button @click="controlService(unit, 'stop')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors">Stop</button>
+                            <button @click="controlService(unit, 'restart')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors">Restart</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sidebar / Links -->
+            <aside class="md:col-span-4 space-y-8">
+                <div>
+                    <h2 class="text-2xl font-bold uppercase tracking-tighter border-b-2 border-black pb-2 mb-4">RESOURCES</h2>
+                    <div class="space-y-2">
+                        <a :href="'https://' + localIp + ':9090'" target="_blank" 
+                           class="block border-2 border-black p-4 hover:bg-black hover:text-white transition-all">
+                            <div class="font-bold uppercase tracking-tight">Cockpit</div>
+                            <div class="text-[10px] opacity-60">System Administration Port 9090</div>
+                        </a>
+                        <a :href="'http://' + localIp + ':6080/vnc.html'" target="_blank" 
+                           class="block border-2 border-black p-4 hover:bg-black hover:text-white transition-all">
+                            <div class="font-bold uppercase tracking-tight">noVNC</div>
+                            <div class="text-[10px] opacity-60">Remote Desktop Port 6080</div>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="border-2 border-black p-6 bg-gray-50 relative overflow-hidden">
+                    <div class="grid-lines absolute inset-0"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-xl font-bold uppercase tracking-tighter mb-2">PROXIES</h3>
+                        <ul class="space-y-1 text-xs font-bold uppercase tracking-widest">
+                            <li><a href="/cockpit" class="hover:underline decoration-2 underline-offset-4">/cockpit</a></li>
+                            <li><a href="/novnc" class="hover:underline decoration-2 underline-offset-4">/novnc</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <footer class="mt-auto border-t-2 border-black p-6 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest">
+            <div>NASy-Peasy Dashboard</div>
+            <div><a href="https://mono.layogtima.com">Mono Design Scheme</a></div>
+        </footer>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, onUnmounted } = Vue
+        createApp({
+            setup() {
+                const publicIp = ref('...')
+                const localIp = ref('...')
+                const services = ref({})
+                const serviceMap = {
+                    cockpit: 'cockpit.socket',
+                    novnc: 'novnc.service',
+                    nginx: 'nginx.service',
+                    sshd: 'sshd.service',
+                    tailscaled: 'tailscaled.service'
+                }
+                let intervalId = null
+
+                const getStatusClass = (status) => {
+                    if (status === 'active') return 'bg-black'
+                    if (status === 'inactive') return 'bg-transparent'
+                    if (status === 'failed') return 'bg-gray-400 animate-pulse'
+                    return 'bg-gray-200'
+                }
+
+                const fetchNetwork = async () => {
+                    try {
+                        const [pub, loc] = await Promise.all([
+                            fetch('/api/public-ip').then(r => r.text()),
+                            fetch('/api/local-ip').then(r => r.text())
+                        ])
+                        publicIp.value = pub
+                        localIp.value = loc
+                    } catch (e) {
+                        publicIp.value = "ERR"
+                        localIp.value = "ERR"
+                    }
+                }
+
+                const fetchServices = async () => {
+                    try {
+                        const res = await fetch('/api/services')
+                        if(res.ok) services.value = await res.json()
+                    } catch (e) {}
+                }
+
+                const controlService = async (unit, action) => {
+                    try {
+                        await fetch('/api/control', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ unit, action })
+                        })
+                        setTimeout(fetchServices, 1000)
+                    } catch(e) {}
+                }
+
+                onMounted(() => {
+                    fetchNetwork()
+                    fetchServices()
+                    intervalId = setInterval(fetchServices, 5000)
+                })
+
+                onUnmounted(() => { if (intervalId) clearInterval(intervalId) })
+
+                return { publicIp, localIp, services, serviceMap, getStatusClass, controlService, fetchServices }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
