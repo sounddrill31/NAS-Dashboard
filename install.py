@@ -53,8 +53,9 @@ def setup_files():
         elif os.path.exists(src):
             shutil.copy2(src, dst)
     
-    # Ensure static directory is populated in the install dir
+    # Ensure static and compose directories are populated in the install dir
     os.makedirs(os.path.join(INSTALL_DIR, "static"), exist_ok=True)
+    os.makedirs(os.path.join(INSTALL_DIR, "compose"), exist_ok=True)
 
 def setup_venv():
     print("🐍 Setting up Python Virtual Environment...")
@@ -123,8 +124,22 @@ def main():
     setup_venv()
     setup_systemd()
     setup_mdns()
+    
+    # Compose provider check
+    provider = shutil.which('podman-compose') or shutil.which('docker-compose')
+    
     print("\n✅ Installation/Update Complete!")
     print(f"👉 Access the dashboard at http://nasypeasy.local (or http://{socket.gethostname()}.local)")
+    
+    if not provider:
+        print("\n⚠️  WARNING: No compose provider found (podman-compose or docker-compose).")
+        print("   Please install one to use the DOCKER tab features:")
+        print("   - Fedora/Ublue: sudo dnf install podman-compose")
+    
+    print("\n📦 To use Docker/Podman management:")
+    print(f"   1. Drop your compose files in {os.path.join(INSTALL_DIR, 'compose')}")
+    print("   2. Ensure 'podman' and 'podman-compose' are installed.")
+    print("   3. Firewall rules are managed via 'firewall-cmd' and persisted.")
 
 if __name__ == "__main__":
     main()
