@@ -9,11 +9,12 @@ import socket
 INSTALL_DIR = os.environ.get('INSTALL_DIR', "/var/opt/nas-dashboard")
 SYSTEMD_FILE = "/etc/systemd/system/nas-dashboard.service"
 AVAHI_FILE = "/etc/avahi/services/nasypeasy.service"
-SKIP_SYSTEM_CONFIG = os.environ.get('SKIP_SYSTEM_CONFIG', 'false').lower() == 'true'
+# Default to True for build-friendliness
+SKIP_SYSTEM_CONFIG = os.environ.get('SKIP_SYSTEM_CONFIG', 'true').lower() == 'true'
 
 def run_cmd(cmd, check=True, **kwargs):
     if SKIP_SYSTEM_CONFIG and cmd[0] in ['systemctl', 'hostnamectl']:
-        print(f"  [SKIP] {' '.join(cmd)}")
+        print(f"  [SKIP COMMAND] {' '.join(cmd)}")
         return subprocess.CompletedProcess(cmd, 0)
     return subprocess.run(cmd, check=check, **kwargs)
 EXTERNAL_RESOURCES = {
@@ -76,7 +77,7 @@ def setup_venv():
     run_cmd([pip_path, "install", "-r", os.path.join(INSTALL_DIR, "requirements.txt")])
 
 def setup_systemd():
-    print("⚙️ Configuring systemd service...")
+    print("⚙️ Preparing systemd service...")
     service_content = f"""[Unit]
 Description=NAS Dashboard Backend
 After=network.target
@@ -91,20 +92,27 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 """
-    with open(SYSTEMD_FILE, "w") as f:
+    # Always write to INSTALL_DIR for visibility/persistence
+    local_service_path = os.path.join(INSTALL_DIR, "nas-dashboard.service")
+    with open(local_service_path, "w") as f:
         f.write(service_content)
+
+    print(f"📦 Copying service to {SYSTEMD_FILE}...")
+    try:
+        shutil.copy2(local_service_path, SYSTEMD_FILE)
+    except Exception as e:
+        print(f"  ⚠️ Warning: Could not copy to {SYSTEMD_FILE}: {e}")
+
+    if SKIP_SYSTEM_CONFIG:
+        print(f"  [SKIP] Systemctl daemon-reload and service restart")
+        return
     
     run_cmd(["systemctl", "daemon-reload"])
     run_cmd(["systemctl", "enable", "nas-dashboard.service"])
     run_cmd(["systemctl", "restart", "nas-dashboard.service"])
 
 def setup_mdns():
-    print("📡 Configuring mDNS (nasypeasy.local)...")
-    # Set hostname
-    current_hostname = socket.gethostname()
-    if current_hostname != "nasypeasy":
-        print("  - Setting system hostname to 'nasypeasy'...")
-        run_cmd(["hostnamectl", "set-hostname", "nasypeasy"])
+    print("📡 Preparing mDNS (nasypeasy.local)...")
     
     # Create Avahi service file
     avahi_content = """<?xml version="1.0" standalone='no'?>
@@ -113,16 +121,35 @@ def setup_mdns():
   <name replace-wildcards="yes">NAS Dashboard on %h</name>
   <service>
     <type>_http._tcp</type>
-    <port>80</port>
+    <port>8000</port>
   </service>
 </service-group>
 """
+    # Always write to INSTALL_DIR
+    local_avahi_path = os.path.join(INSTALL_DIR, "nasypeasy.service")
+    with open(local_avahi_path, "w") as f:
+        f.write(avahi_content)
+
     if os.path.exists("/etc/avahi/services"):
-        with open(AVAHI_FILE, "w") as f:
-            f.write(avahi_content)
-        run_cmd(["systemctl", "restart", "avahi-daemon"], check=False)
+        print(f"📦 Copying mDNS service to {AVAHI_FILE}...")
+        try:
+            shutil.copy2(local_avahi_path, AVAHI_FILE)
+        except Exception as e:
+            print(f"  ⚠️ Warning: Could not copy to {AVAHI_FILE}: {e}")
     else:
-        print("  ⚠️ Warning: Avahi services directory not found. Skipping mDNS service file.")
+        print("  ⚠️ Warning: Avahi services directory not found. Skipping system-wide mDNS setup.")
+
+    if SKIP_SYSTEM_CONFIG:
+        print(f"  [SKIP] Hostname setup and avahi-daemon restart")
+        return
+
+    # Set hostname
+    current_hostname = socket.gethostname()
+    if current_hostname != "nasypeasy":
+        print("  - Setting system hostname to 'nasypeasy'...")
+        run_cmd(["hostnamectl", "set-hostname", "nasypeasy"])
+    
+    run_cmd(["systemctl", "restart", "avahi-daemon"], check=False)
 
 def main():
     check_root()
