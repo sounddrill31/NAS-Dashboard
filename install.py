@@ -6,9 +6,16 @@ import urllib.request
 import socket
 
 # Configuration
-INSTALL_DIR = "/opt/nas-dashboard"
+INSTALL_DIR = os.environ.get('INSTALL_DIR', "/var/opt/nas-dashboard")
 SYSTEMD_FILE = "/etc/systemd/system/nas-dashboard.service"
 AVAHI_FILE = "/etc/avahi/services/nasypeasy.service"
+SKIP_SYSTEM_CONFIG = os.environ.get('SKIP_SYSTEM_CONFIG', 'false').lower() == 'true'
+
+def run_cmd(cmd, check=True, **kwargs):
+    if SKIP_SYSTEM_CONFIG and cmd[0] in ['systemctl', 'hostnamectl']:
+        print(f"  [SKIP] {' '.join(cmd)}")
+        return subprocess.CompletedProcess(cmd, 0)
+    return subprocess.run(cmd, check=check, **kwargs)
 EXTERNAL_RESOURCES = {
     "static/vue.global.js": "https://unpkg.com/vue@3/dist/vue.global.js",
     "static/tailwind.min.js": "https://cdn.tailwindcss.com"
@@ -61,12 +68,12 @@ def setup_venv():
     print("🐍 Setting up Python Virtual Environment...")
     venv_path = os.path.join(INSTALL_DIR, "venv")
     if not os.path.exists(venv_path):
-        subprocess.run([sys.executable, "-m", "venv", venv_path], check=True)
+        run_cmd([sys.executable, "-m", "venv", venv_path])
     
     print("📜 Installing dependencies...")
     pip_path = os.path.join(venv_path, "bin", "pip")
-    subprocess.run([pip_path, "install", "--upgrade", "pip"], check=True)
-    subprocess.run([pip_path, "install", "-r", os.path.join(INSTALL_DIR, "requirements.txt")], check=True)
+    run_cmd([pip_path, "install", "--upgrade", "pip"])
+    run_cmd([pip_path, "install", "-r", os.path.join(INSTALL_DIR, "requirements.txt")])
 
 def setup_systemd():
     print("⚙️ Configuring systemd service...")
@@ -87,9 +94,9 @@ WantedBy=multi-user.target
     with open(SYSTEMD_FILE, "w") as f:
         f.write(service_content)
     
-    subprocess.run(["systemctl", "daemon-reload"], check=True)
-    subprocess.run(["systemctl", "enable", "nas-dashboard.service"], check=True)
-    subprocess.run(["systemctl", "restart", "nas-dashboard.service"], check=True)
+    run_cmd(["systemctl", "daemon-reload"])
+    run_cmd(["systemctl", "enable", "nas-dashboard.service"])
+    run_cmd(["systemctl", "restart", "nas-dashboard.service"])
 
 def setup_mdns():
     print("📡 Configuring mDNS (nasypeasy.local)...")
@@ -97,7 +104,7 @@ def setup_mdns():
     current_hostname = socket.gethostname()
     if current_hostname != "nasypeasy":
         print("  - Setting system hostname to 'nasypeasy'...")
-        subprocess.run(["hostnamectl", "set-hostname", "nasypeasy"], check=True)
+        run_cmd(["hostnamectl", "set-hostname", "nasypeasy"])
     
     # Create Avahi service file
     avahi_content = """<?xml version="1.0" standalone='no'?>
@@ -113,7 +120,7 @@ def setup_mdns():
     if os.path.exists("/etc/avahi/services"):
         with open(AVAHI_FILE, "w") as f:
             f.write(avahi_content)
-        subprocess.run(["systemctl", "restart", "avahi-daemon"], check=False)
+        run_cmd(["systemctl", "restart", "avahi-daemon"], check=False)
     else:
         print("  ⚠️ Warning: Avahi services directory not found. Skipping mDNS service file.")
 

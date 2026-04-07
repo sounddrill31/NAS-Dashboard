@@ -11,18 +11,27 @@ A modern, minimal, and playful system dashboard for Ublue/Fedora immutable distr
 
 ## Installation
 
-Clone the repository and run the Python install script as root:
+Clone the repository and run the Python install script. You can customize the installation using environment variables:
 
 ```bash
+# Default installation (to /var/opt/nas-dashboard, port 8000)
 sudo python3 install.py
+
+# Custom installation example
+sudo PORT=9000 INSTALL_DIR=/custom/path SKIP_SYSTEM_CONFIG=true python3 install.py
 ```
+
+### Configuration Variables:
+- `INSTALL_DIR`: Where the app files will be stored (default: `/var/opt/nas-dashboard`)
+- `PORT`: The port the Flask app will run on (default: `8000`)
+- `SKIP_SYSTEM_CONFIG`: Set to `true` to skip `systemctl` and `hostnamectl` commands (useful for dry-runs or limited environments)
 
 ### What the installer does:
 1. Downloads external JS/CSS dependencies (Vue, Tailwind) to `/static` for local serving.
-2. Installs/Updates files to `/opt/nas-dashboard`.
+2. Installs/Updates files to your specified `INSTALL_DIR`.
 3. Sets up a Python virtual environment and installs requirements.
-4. Registers and starts the `nas-dashboard` systemd service for autostart.
-5. Configures the system hostname to `nasypeasy` and registers an Avahi mDNS service, making the dashboard available at `http://nasypeasy.local`.
+4. Registers and starts the `nas-dashboard` systemd service for autostart (unless skipped).
+5. Configures the system hostname to `nasypeasy` and registers an Avahi mDNS service (unless skipped).
 
 
 ## Local Development

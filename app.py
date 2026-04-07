@@ -17,7 +17,7 @@ SERVICES = {
     'tailscaled': 'tailscaled.service'
 }
 
-COMPOSE_DIR = "/opt/nas-dashboard/compose"
+COMPOSE_DIR = os.environ.get('COMPOSE_DIR', "/var/opt/nas-dashboard/compose")
 if not os.path.exists(COMPOSE_DIR):
     try:
         os.makedirs(COMPOSE_DIR, exist_ok=True)
@@ -259,4 +259,5 @@ def system_check():
     })
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=80, debug=False)
+    port = int(os.environ.get('PORT', 8000))
+    app.run(host='0.0.0.0', port=port, debug=False)
