@@ -1,0 +1,19 @@
+[Unit]
+Description=Pi-hole DNS Ad-blocker
+After=network-online.target
+
+[Container]
+Image=docker.io/pihole/pihole:latest
+Environment=TZ=UTC
+Environment=WEBPASSWORD=admin
+# Publish ports to the host
+PublishPort=53:53/udp
+PublishPort=53:53/tcp
+PublishPort=8081:80/tcp
+Volume=/var/lib/pihole:/etc/pihole:Z
+Volume=/var/lib/dnsmasq.d:/etc/dnsmasq.d:Z
+AutoUpdate=registry
+AddCapability=CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target

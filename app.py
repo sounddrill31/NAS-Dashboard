@@ -18,11 +18,15 @@ SERVICES = {
 }
 
 COMPOSE_DIR = os.environ.get('COMPOSE_DIR', "/var/opt/nas-dashboard/compose")
-if not os.path.exists(COMPOSE_DIR):
-    try:
-        os.makedirs(COMPOSE_DIR, exist_ok=True)
-    except:
-        pass
+QUADLET_DIR = os.environ.get('QUADLET_DIR', "/etc/containers/systemd")
+NGINX_DIR = os.environ.get('NGINX_DIR', "/etc/nginx/conf.d")
+
+for d in [COMPOSE_DIR, QUADLET_DIR, NGINX_DIR]:
+    if not os.path.exists(d):
+        try:
+            os.makedirs(d, exist_ok=True)
+        except:
+            pass
 
 def get_service_status(unit):
     try:
@@ -35,9 +39,11 @@ def get_service_status(unit):
         return "error"
 
 def run_systemctl_action(unit, action):
-    if unit not in SERVICES.values():
+    # Allow any .service or .socket unit if it's a quadlet or in SERVICES
+    is_valid = unit in SERVICES.values() or unit.endswith('.service') or unit.endswith('.socket')
+    if not is_valid:
         return False, "Invalid service"
-    if action not in ['start', 'stop', 'restart']:
+    if action not in ['start', 'stop', 'restart', 'enable', 'disable']:
         return False, "Invalid action"
     try:
         subprocess.run(['systemctl', action, unit], check=True, timeout=10)
@@ -74,6 +80,16 @@ def services():
     status = {}
     for name, unit in SERVICES.items():
         status[unit] = get_service_status(unit)
+    
+    # Also include quadlet services if they exist
+    try:
+        for f in os.listdir(QUADLET_DIR):
+            if f.endswith('.container'):
+                unit = f.replace('.container', '.service')
+                status[unit] = get_service_status(unit)
+    except:
+        pass
+
     return jsonify(status)
 
 @app.route('/api/control', methods=['POST'])
@@ -90,7 +106,15 @@ def control():
 @app.route('/api/logs')
 def get_logs():
     unit = request.args.get('unit')
-    if unit not in SERVICES.values():
+    # Basic validation: check if it's in SERVICES or is a quadlet-derived service
+    is_valid = unit in SERVICES.values()
+    if not is_valid and unit.endswith('.service'):
+        # Check if corresponding .container exists
+        container_file = unit.replace('.service', '.container')
+        if os.path.exists(os.path.join(QUADLET_DIR, container_file)):
+            is_valid = True
+
+    if not is_valid:
         return jsonify({"status": "error", "message": "Invalid service"}), 400
     try:
         result = subprocess.run(['journalctl', '-u', unit, '-n', '50', '--no-pager'], capture_output=True, text=True, timeout=5)
@@ -105,6 +129,109 @@ def podman_containers():
         return result.stdout or "[]"
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/podman/quadlets')
+def list_quadlets():
+    try:
+        files = [f for f in os.listdir(QUADLET_DIR) if f.endswith('.container')]
+        return jsonify(files)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/podman/quadlets/read')
+def read_quadlet():
+    filename = request.args.get('file')
+    if not filename: return "Filename required", 400
+    safe_path = os.path.normpath(os.path.join(QUADLET_DIR, filename))
+    if not safe_path.startswith(QUADLET_DIR): return "Unauthorized", 403
+    try:
+        if not os.path.exists(safe_path): return ""
+        with open(safe_path, 'r') as f: return f.read()
+    except Exception as e: return str(e), 500
+
+@app.route('/api/podman/quadlets/save', methods=['POST'])
+def save_quadlet():
+    data = request.json
+    filename = data.get('file')
+    content = data.get('content')
+    if not filename or content is None: return "Invalid request", 400
+    if not filename.endswith('.container'):
+        return "Only .container files allowed", 400
+    safe_path = os.path.normpath(os.path.join(QUADLET_DIR, filename))
+    if not safe_path.startswith(QUADLET_DIR): return "Unauthorized", 403
+    try:
+        with open(safe_path, 'w') as f: f.write(content)
+        # Trigger daemon-reload to pick up changes
+        subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+        return jsonify({"status": "success"})
+    except Exception as e: return str(e), 500
+
+@app.route('/api/podman/quadlets/remove', methods=['POST'])
+def remove_quadlet():
+    data = request.json
+    filename = data.get('file')
+    if not filename: return "Filename required", 400
+    safe_path = os.path.normpath(os.path.join(QUADLET_DIR, filename))
+    if not safe_path.startswith(QUADLET_DIR): return "Unauthorized", 403
+    try:
+        if os.path.exists(safe_path):
+            os.remove(safe_path)
+            subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+        return jsonify({"status": "success"})
+    except Exception as e: return str(e), 500
+
+@app.route('/api/nginx/proxies')
+def list_proxies():
+    try:
+        files = [f for f in os.listdir(NGINX_DIR) if f.endswith('.conf')]
+        return jsonify(files)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/nginx/proxies/read')
+def read_proxy():
+    filename = request.args.get('file')
+    if not filename: return "Filename required", 400
+    safe_path = os.path.normpath(os.path.join(NGINX_DIR, filename))
+    if not safe_path.startswith(NGINX_DIR): return "Unauthorized", 403
+    try:
+        if not os.path.exists(safe_path): return ""
+        with open(safe_path, 'r') as f: return f.read()
+    except Exception as e: return str(e), 500
+
+@app.route('/api/nginx/proxies/save', methods=['POST'])
+def save_proxy():
+    data = request.json
+    filename = data.get('file')
+    content = data.get('content')
+    if not filename or content is None: return "Invalid request", 400
+    if not filename.endswith('.conf'):
+        return "Only .conf files allowed", 400
+    safe_path = os.path.normpath(os.path.join(NGINX_DIR, filename))
+    if not safe_path.startswith(NGINX_DIR): return "Unauthorized", 403
+    try:
+        with open(safe_path, 'w') as f: f.write(content)
+        # Check if nginx is running and reload it
+        if shutil.which('nginx'):
+            subprocess.run(['nginx', '-t'], check=True, timeout=5) # Test config
+            subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+        return jsonify({"status": "success"})
+    except Exception as e: return str(e), 500
+
+@app.route('/api/nginx/proxies/remove', methods=['POST'])
+def remove_proxy():
+    data = request.json
+    filename = data.get('file')
+    if not filename: return "Filename required", 400
+    safe_path = os.path.normpath(os.path.join(NGINX_DIR, filename))
+    if not safe_path.startswith(NGINX_DIR): return "Unauthorized", 403
+    try:
+        if os.path.exists(safe_path):
+            os.remove(safe_path)
+            if shutil.which('nginx'):
+                subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+        return jsonify({"status": "success"})
+    except Exception as e: return str(e), 500
 
 @app.route('/api/podman/compose')
 def list_compose():
