@@ -1,0 +1,12 @@
+[Unit]
+Description=Homarr container
+
+[Container]
+Image=ghcr.io/ajnart/homarr:latest
+PublishPort=7575:7575
+Volume=homarr-configs:/app/data/configs
+Volume=homarr-icons:/app/public/icons
+Volume=homarr-data:/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Filebrowser container
+
+[Container]
+Image=docker.io/filebrowser/filebrowser:latest
+PublishPort=8080:80
+Volume=filebrowser-data:/srv
+
+[Install]
+WantedBy=multi-user.target

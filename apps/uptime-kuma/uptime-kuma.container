@@ -1,0 +1,10 @@
+[Unit]
+Description=Uptime Kuma container
+
+[Container]
+Image=docker.io/louislam/uptime-kuma:1
+Volume=uptime-kuma:/app/data
+PublishPort=3001:3001
+
+[Install]
+WantedBy=multi-user.target

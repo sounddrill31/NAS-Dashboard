@@ -1,0 +1,5 @@
+{
+  "name": "SearXNG",
+  "description": "Privacy-respecting metasearch engine.",
+  "port": 8080
+}

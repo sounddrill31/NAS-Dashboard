@@ -519,6 +519,8 @@
 
                 // Proxy state
                 const proxyFiles = ref([])
+                const apps = ref([])
+                const repoUrl = ref('')
                 const selectedProxy = ref(null)
 
                 // Docker state
@@ -693,6 +695,61 @@ WantedBy=multi-user.target`
                 }
 
                 // Proxy functions
+                const fetchApps = async () => {
+                    try {
+                        const res = await fetch('/api/apps')
+                        if (res.ok) apps.value = await res.json()
+                    } catch (e) {}
+                }
+
+                const installApp = async (app) => {
+                    app.installing = true
+                    try {
+                        await fetch('/api/apps/install', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: app.id })
+                        })
+                        fetchApps()
+                    } catch (e) {
+                        alert('Install failed')
+                    } finally {
+                        app.installing = false
+                    }
+                }
+
+                const uninstallApp = async (app) => {
+                    if(!confirm(`Uninstall ${app.name}?`)) return
+                    app.installing = true
+                    try {
+                        await fetch('/api/apps/uninstall', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: app.id })
+                        })
+                        fetchApps()
+                    } catch (e) {
+                        alert('Uninstall failed')
+                    } finally {
+                        app.installing = false
+                    }
+                }
+
+                const syncApps = async () => {
+                    if(!repoUrl.value) return
+                    try {
+                        await fetch('/api/apps/sync', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: repoUrl.value })
+                        })
+                        fetchApps()
+                        repoUrl.value = ''
+                    } catch (e) {
+                        alert('Sync failed')
+                    }
+                }
+
                 const fetchProxies = async () => {
                     try {
                         const res = await fetch('/api/nginx/proxies')
@@ -940,6 +997,8 @@ WantedBy=multi-user.target`
                         fetchQuadlets()
                     } else if (newTab === 'proxies') {
                         fetchProxies()
+                    } else if (newTab === 'apps') {
+                        fetchApps()
                     } else {
                         fetchServices()
                     }
@@ -953,6 +1012,7 @@ WantedBy=multi-user.target`
                         if(activeTab.value === 'docker' && !editingFile.value) fetchContainers()
                         if(activeTab.value === 'quadlets' && !editingFile.value) fetchQuadlets()
                         if(activeTab.value === 'proxies' && !editingFile.value) fetchProxies()
+                        if(activeTab.value === 'apps') fetchApps()
                     }, 5000)
                 })
 
@@ -969,6 +1029,7 @@ WantedBy=multi-user.target`
                     removeQuadlet, openQuadletEditor, createNewQuadlet, deployPihole,
                     proxyFiles, selectedProxy, fetchProxies, removeProxy, openProxyEditor, createNewProxy,
                     tsAuthKey, commandOutput, tailscaleLogin,
+                    apps, repoUrl, fetchApps, installApp, uninstallApp, syncApps,
                     selectedCompose, currentComposeLogs, fetchComposeLogs, toggleComposeLogs,
                     systemStatus, showCredits
                 }

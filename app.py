@@ -20,8 +20,9 @@ SERVICES = {
 COMPOSE_DIR = os.environ.get('COMPOSE_DIR', "/var/opt/nas-dashboard/compose")
 QUADLET_DIR = os.environ.get('QUADLET_DIR', "/etc/containers/systemd")
 NGINX_DIR = os.environ.get('NGINX_DIR', "/etc/nginx/conf.d")
+APPS_DIR = os.environ.get('APPS_DIR', "/var/opt/nas-dashboard/apps")
 
-for d in [COMPOSE_DIR, QUADLET_DIR, NGINX_DIR]:
+for d in [COMPOSE_DIR, QUADLET_DIR, NGINX_DIR, APPS_DIR]:
     if not os.path.exists(d):
         try:
             os.makedirs(d, exist_ok=True)
@@ -378,7 +379,145 @@ def save_file_content():
         return jsonify({"status": "success"})
     except Exception as e: return str(e), 500
 
+
+@app.route('/api/apps')
+def list_apps():
+    apps = []
+    if not os.path.exists(APPS_DIR):
+        return jsonify(apps)
+
+    for app_dir in os.listdir(APPS_DIR):
+        full_path = os.path.join(APPS_DIR, app_dir)
+        if os.path.isdir(full_path):
+            json_path = os.path.join(full_path, 'app.json')
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r') as f:
+                        app_data = json.load(f)
+                        app_data['id'] = app_dir
+                        # Check status
+                        is_installed = False
+                        container_files = [cf for cf in os.listdir(full_path) if cf.endswith('.container')]
+                        if container_files:
+                            # If ANY of the container files exist in QUADLET_DIR, consider it installed
+                            for cf in container_files:
+                                if os.path.exists(os.path.join(QUADLET_DIR, cf)):
+                                    is_installed = True
+                                    break
+
+                        app_data['installed'] = is_installed
+                        apps.append(app_data)
+                except Exception as e:
+                    pass
+    return jsonify(apps)
+
+
+@app.route('/api/apps/install', methods=['POST'])
+def install_app():
+    data = request.json
+    app_id = data.get('id')
+    if not app_id: return "App ID required", 400
+
+    app_dir = os.path.join(APPS_DIR, app_id)
+    if not os.path.exists(app_dir): return "App not found", 404
+
+    try:
+        # Install Quadlet
+        container_files = [f for f in os.listdir(app_dir) if f.endswith('.container')]
+        for f in container_files:
+            src = os.path.join(app_dir, f)
+            dst = os.path.join(QUADLET_DIR, f)
+            shutil.copy2(src, dst)
+
+        # Install Nginx Config
+        conf_files = [f for f in os.listdir(app_dir) if f.endswith('.conf')]
+        for f in conf_files:
+            src = os.path.join(app_dir, f)
+            dst = os.path.join(NGINX_DIR, f)
+            shutil.copy2(src, dst)
+
+        # Reload systemd
+        if container_files:
+            subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+            for f in container_files:
+                service_name = f.replace('.container', '.service')
+                # Try to enable and start, but don't fail if it doesn't work immediately
+                subprocess.run(['systemctl', 'enable', '--now', service_name], timeout=30)
+
+        # Reload nginx
+        if conf_files:
+            if shutil.which('nginx'):
+                subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/apps/uninstall', methods=['POST'])
+def uninstall_app():
+    data = request.json
+    app_id = data.get('id')
+    if not app_id: return "App ID required", 400
+
+    app_dir = os.path.join(APPS_DIR, app_id)
+    if not os.path.exists(app_dir): return "App not found", 404
+
+    try:
+        container_files = [f for f in os.listdir(app_dir) if f.endswith('.container')]
+        for f in container_files:
+            service_name = f.replace('.container', '.service')
+            try:
+                subprocess.run(['systemctl', 'disable', '--now', service_name], timeout=30)
+            except:
+                pass
+            dst = os.path.join(QUADLET_DIR, f)
+            if os.path.exists(dst):
+                os.remove(dst)
+
+        conf_files = [f for f in os.listdir(app_dir) if f.endswith('.conf')]
+        for f in conf_files:
+            dst = os.path.join(NGINX_DIR, f)
+            if os.path.exists(dst):
+                os.remove(dst)
+
+        if container_files:
+            subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+
+        if conf_files:
+            if shutil.which('nginx'):
+                subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/apps/sync', methods=['POST'])
+def sync_apps():
+    data = request.json
+    repo_url = data.get('url')
+    if not repo_url: return "Repository URL required", 400
+
+    try:
+        if os.path.exists(APPS_DIR):
+            if os.path.exists(os.path.join(APPS_DIR, '.git')):
+                # It's a git repo, try to pull
+                subprocess.run(['git', '-C', APPS_DIR, 'remote', 'set-url', 'origin', repo_url], check=True, timeout=10)
+                subprocess.run(['git', '-C', APPS_DIR, 'pull'], check=True, timeout=30)
+            else:
+                # Not a git repo, remove and clone
+                shutil.rmtree(APPS_DIR)
+                subprocess.run(['git', 'clone', repo_url, APPS_DIR], check=True, timeout=60)
+        else:
+            # Doesn't exist, clone
+            subprocess.run(['git', 'clone', repo_url, APPS_DIR], check=True, timeout=60)
+
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/system/check')
+
+
 def system_check():
     return jsonify({
         "podman": bool(shutil.which('podman')),

@@ -1,0 +1,10 @@
+[Unit]
+Description=Ente Server container
+
+[Container]
+Image=docker.io/ente/server:latest
+PublishPort=8080:8080
+Volume=ente-data:/data
+
+[Install]
+WantedBy=multi-user.target

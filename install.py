@@ -50,7 +50,7 @@ def setup_files():
     os.makedirs(INSTALL_DIR, exist_ok=True)
     
     # Files to copy (current directory contents)
-    items_to_copy = ['app.py', 'templates', 'static', 'requirements.txt']
+    items_to_copy = ['app.py', 'templates', 'static', 'requirements.txt', 'apps']
     for item in items_to_copy:
         src = item
         dst = os.path.join(INSTALL_DIR, item)
