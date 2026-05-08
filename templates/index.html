@@ -519,8 +519,53 @@
 
                 // Proxy state
                 const proxyFiles = ref([])
+
                 const apps = ref([])
                 const repoUrl = ref('')
+                const isAuthenticated = ref(false)
+                const loginForm = ref({ username: '', password: '' })
+                const loginError = ref('')
+
+                const checkAuth = async () => {
+                    try {
+                        const res = await fetch('/api/auth/status')
+                        const data = await res.json()
+                        isAuthenticated.value = data.authenticated
+                    } catch (e) {
+                        isAuthenticated.value = false
+                    }
+                }
+
+                const login = async () => {
+                    loginError.value = ''
+                    try {
+                        const res = await fetch('/api/auth/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(loginForm.value)
+                        })
+                        if (res.ok) {
+                            isAuthenticated.value = true
+                            loginForm.value = { username: '', password: '' }
+                            // Fetch initial data
+                            fetchNetwork()
+                            fetchServices()
+                        } else {
+                            const data = await res.json()
+                            loginError.value = data.error || 'Login failed'
+                        }
+                    } catch (e) {
+                        loginError.value = 'Connection error'
+                    }
+                }
+
+                const logout = async () => {
+                    try {
+                        await fetch('/api/auth/logout', { method: 'POST' })
+                        isAuthenticated.value = false
+                    } catch (e) {}
+                }
+
                 const selectedProxy = ref(null)
 
                 // Docker state
@@ -1005,9 +1050,13 @@ WantedBy=multi-user.target`
                 })
 
                 onMounted(() => {
-                    fetchNetwork()
-                    fetchServices()
+                    checkAuth()
+                    if (isAuthenticated.value) {
+                        fetchNetwork()
+                        fetchServices()
+                    }
                     intervalId = setInterval(() => {
+                        if (!isAuthenticated.value) return;
                         if(activeTab.value === 'services') fetchServices()
                         if(activeTab.value === 'docker' && !editingFile.value) fetchContainers()
                         if(activeTab.value === 'quadlets' && !editingFile.value) fetchQuadlets()
@@ -1029,7 +1078,10 @@ WantedBy=multi-user.target`
                     removeQuadlet, openQuadletEditor, createNewQuadlet, deployPihole,
                     proxyFiles, selectedProxy, fetchProxies, removeProxy, openProxyEditor, createNewProxy,
                     tsAuthKey, commandOutput, tailscaleLogin,
+
                     apps, repoUrl, fetchApps, installApp, uninstallApp, syncApps,
+                    isAuthenticated, loginForm, loginError, login, logout, checkAuth,
+
                     selectedCompose, currentComposeLogs, fetchComposeLogs, toggleComposeLogs,
                     systemStatus, showCredits
                 }

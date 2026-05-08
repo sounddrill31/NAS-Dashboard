@@ -41,9 +41,24 @@ def mock_dirs(monkeypatch):
 
 @pytest.fixture
 def client():
-
     app.config['TESTING'] = True
+    app.config['REQUIRE_AUTH'] = False # Disable auth for tests explicitly if needed, but let's test auth actually works
+
+    # Let's keep auth enabled to test it
+    app.config['REQUIRE_AUTH'] = True
+
+    # Initialize a test auth DB
+    test_db = '/tmp/test_auth.db'
+    app.config['AUTH_DB_PATH'] = test_db
+    app.secret_key = 'test_secret'
+
+    # Must use monkeypatch or os.environ for AUTH_DB_PATH as it's evaluated at module level sometimes
+
     with app.test_client() as client:
+        # Simulate a logged in user by accessing the session securely
+        with client.session_transaction() as sess:
+            sess['logged_in'] = True
+            sess['username'] = 'admin'
         yield client
 
 def test_list_apps_empty(client, monkeypatch):

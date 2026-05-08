@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, request, render_template
+
+from flask import Flask, jsonify, request, render_template, session
 import subprocess
 import urllib.request
 import socket
@@ -6,8 +7,28 @@ import os
 import json
 import re
 import shutil
+from pysqlcipher3 import dbapi2 as sqlite
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'default_flask_secret_change_me')
+
+from functools import wraps
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Allow testing to bypass auth if explicitly configured
+        if app.config.get('TESTING') and not app.config.get('REQUIRE_AUTH', True):
+            return f(*args, **kwargs)
+
+        if 'logged_in' not in session:
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 SERVICES = {
     'cockpit': 'cockpit.socket',
@@ -21,6 +42,8 @@ COMPOSE_DIR = os.environ.get('COMPOSE_DIR', "/var/opt/nas-dashboard/compose")
 QUADLET_DIR = os.environ.get('QUADLET_DIR', "/etc/containers/systemd")
 NGINX_DIR = os.environ.get('NGINX_DIR', "/etc/nginx/conf.d")
 APPS_DIR = os.environ.get('APPS_DIR', "/var/opt/nas-dashboard/apps")
+AUTH_DB_PATH = os.environ.get('AUTH_DB_PATH', "./auth.db")
+DB_PASSWORD = os.environ.get('DB_PASSWORD', "default_secret_key_change_me")
 
 for d in [COMPOSE_DIR, QUADLET_DIR, NGINX_DIR, APPS_DIR]:
     if not os.path.exists(d):
@@ -28,6 +51,39 @@ for d in [COMPOSE_DIR, QUADLET_DIR, NGINX_DIR, APPS_DIR]:
             os.makedirs(d, exist_ok=True)
         except:
             pass
+
+def init_db():
+    # Make sure parent dir exists
+    os.makedirs(os.path.dirname(AUTH_DB_PATH), exist_ok=True)
+    conn = sqlite.connect(AUTH_DB_PATH)
+    conn.execute(f"PRAGMA key='{DB_PASSWORD}'")
+
+    # Try to execute something to check if the password is correct/db is init
+    try:
+        conn.execute("SELECT count(*) FROM sqlite_master;")
+    except sqlite.DatabaseError:
+        print("Database key is incorrect or database is corrupted.")
+        return
+
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        )
+    ''')
+
+    # Create default admin user if no users exist
+    cursor.execute("SELECT count(*) FROM users")
+    if cursor.fetchone()[0] == 0:
+        default_hash = generate_password_hash('admin')
+        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", ('admin', default_hash))
+
+    conn.commit()
+    conn.close()
+
+init_db()
 
 def get_service_status(unit):
     try:
@@ -52,7 +108,47 @@ def run_systemctl_action(unit, action):
     except Exception as e:
         return False, str(e)
 
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify({"error": "Missing credentials"}), 400
+
+    try:
+        conn = sqlite.connect(AUTH_DB_PATH)
+        conn.execute(f"PRAGMA key='{DB_PASSWORD}'")
+        cursor = conn.cursor()
+        cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if row and check_password_hash(row[0], password):
+            session['logged_in'] = True
+            session['username'] = username
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"error": "Invalid credentials"}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    session.pop('logged_in', None)
+    session.pop('username', None)
+    return jsonify({"status": "success"})
+
+@app.route('/api/auth/status', methods=['GET'])
+def auth_status():
+    if app.config.get('TESTING') and not app.config.get('REQUIRE_AUTH', True):
+         return jsonify({"authenticated": True})
+    return jsonify({"authenticated": 'logged_in' in session})
+
 @app.route('/')
+
 def index():
     return render_template('index.html')
 
@@ -94,6 +190,7 @@ def services():
     return jsonify(status)
 
 @app.route('/api/control', methods=['POST'])
+@login_required
 def control():
     data = request.json
     unit = data.get('unit')
@@ -151,6 +248,7 @@ def read_quadlet():
     except Exception as e: return str(e), 500
 
 @app.route('/api/podman/quadlets/save', methods=['POST'])
+@login_required
 def save_quadlet():
     data = request.json
     filename = data.get('file')
@@ -168,6 +266,7 @@ def save_quadlet():
     except Exception as e: return str(e), 500
 
 @app.route('/api/podman/quadlets/remove', methods=['POST'])
+@login_required
 def remove_quadlet():
     data = request.json
     filename = data.get('file')
@@ -201,6 +300,7 @@ def read_proxy():
     except Exception as e: return str(e), 500
 
 @app.route('/api/nginx/proxies/save', methods=['POST'])
+@login_required
 def save_proxy():
     data = request.json
     filename = data.get('file')
@@ -220,6 +320,7 @@ def save_proxy():
     except Exception as e: return str(e), 500
 
 @app.route('/api/nginx/proxies/remove', methods=['POST'])
+@login_required
 def remove_proxy():
     data = request.json
     filename = data.get('file')
@@ -243,6 +344,7 @@ def list_compose():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/podman/compose/action', methods=['POST'])
+@login_required
 def compose_action():
     data = request.json
     filename = data.get('file')
@@ -320,6 +422,7 @@ def list_firewall():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/firewall/add', methods=['POST'])
+@login_required
 def add_firewall():
     data = request.json
     port_spec = data.get('port') # e.g. "80/tcp"
@@ -339,6 +442,7 @@ def add_firewall():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/tailscale/up', methods=['POST'])
+@login_required
 def tailscale_up():
     data = request.json
     authkey = data.get('authkey')
@@ -365,6 +469,7 @@ def read_file_content():
     except Exception as e: return str(e), 500
 
 @app.route('/api/files/save', methods=['POST'])
+@login_required
 def save_file_content():
     data = request.json
     filename = data.get('file')
@@ -413,6 +518,7 @@ def list_apps():
 
 
 @app.route('/api/apps/install', methods=['POST'])
+@login_required
 def install_app():
     data = request.json
     app_id = data.get('id')
@@ -454,6 +560,7 @@ def install_app():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/apps/uninstall', methods=['POST'])
+@login_required
 def uninstall_app():
     data = request.json
     app_id = data.get('id')
@@ -492,6 +599,7 @@ def uninstall_app():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/apps/sync', methods=['POST'])
+@login_required
 def sync_apps():
     data = request.json
     repo_url = data.get('url')

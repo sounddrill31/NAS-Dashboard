@@ -9,9 +9,15 @@ A modern, minimal, and playful system dashboard for Ublue/Fedora immutable distr
 - **mDNS Support:** Automatically configures your system to broadcast as `nasypeasy.local`.
 - **Perpetual Uptime:** Configured out-of-the-box as a resilient `systemd` service.
 
+
 ## Installation
 
 Clone the repository and run the Python install script. You can customize the installation using environment variables:
+
+**Note for Ubuntu/Debian users:** You must install `libsqlcipher-dev` before running the installation to support the encrypted authentication database.
+```bash
+sudo apt-get update && sudo apt-get install libsqlcipher-dev
+```
 
 ```bash
 # Default installation (to /var/opt/nas-dashboard, port 8000)
