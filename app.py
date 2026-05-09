@@ -598,6 +598,113 @@ def uninstall_app():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/api/apps/read')
+@login_required
+def read_app_file():
+    app_id = request.args.get('id')
+    file_type = request.args.get('type') # 'json', 'container', 'conf'
+
+    if not app_id or file_type not in ['json', 'container', 'conf']:
+        return "Invalid request", 400
+
+    app_dir = os.path.normpath(os.path.join(APPS_DIR, app_id))
+    if not app_dir.startswith(APPS_DIR) or not os.path.exists(app_dir):
+        return "App not found", 404
+
+    filename = 'app.json'
+    if file_type == 'container':
+        filename = f"{app_id}.container"
+    elif file_type == 'conf':
+        filename = f"{app_id}.conf"
+
+    file_path = os.path.join(app_dir, filename)
+
+    if not os.path.exists(file_path):
+        return "" # File doesn't exist yet, return empty
+
+    try:
+        with open(file_path, 'r') as f:
+            return f.read()
+    except Exception as e:
+        return str(e), 500
+
+
+@app.route('/api/apps/save', methods=['POST'])
+@login_required
+def save_app_file():
+    data = request.json
+    app_id = data.get('id')
+    file_type = data.get('type')
+    file_content = data.get('content')
+
+    if not app_id or file_type not in ['json', 'container', 'conf'] or file_content is None:
+        return "Invalid request", 400
+
+    app_dir = os.path.normpath(os.path.join(APPS_DIR, app_id))
+    if not app_dir.startswith(APPS_DIR):
+        return "Unauthorized", 403
+
+    if not os.path.exists(app_dir):
+        os.makedirs(app_dir, exist_ok=True)
+
+    filename = 'app.json'
+    if file_type == 'container':
+        filename = f"{app_id}.container"
+    elif file_type == 'conf':
+        filename = f"{app_id}.conf"
+
+    file_path = os.path.join(app_dir, filename)
+
+    try:
+        with open(file_path, 'w') as f:
+            f.write(file_content)
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return str(e), 500
+
+
+@app.route('/api/apps/create', methods=['POST'])
+@login_required
+def create_app():
+    data = request.json
+    app_id = data.get('id')
+
+    if not app_id:
+        return "App ID required", 400
+
+    app_dir = os.path.normpath(os.path.join(APPS_DIR, app_id))
+    if not app_dir.startswith(APPS_DIR):
+        return "Unauthorized", 403
+
+    if os.path.exists(app_dir):
+        return "App already exists", 400
+
+    try:
+        os.makedirs(app_dir)
+        # Create skeleton app.json
+        skeleton_json = {
+            "name": app_id.capitalize(),
+            "description": "A new application",
+            "port": 8080
+        }
+        with open(os.path.join(app_dir, 'app.json'), 'w') as f:
+            json.dump(skeleton_json, f, indent=2)
+
+        # Create skeleton container
+        with open(os.path.join(app_dir, f'{app_id}.container'), 'w') as f:
+            f.write(f"[Unit]\nDescription={app_id} container\n\n[Container]\nImage=\nPublishPort=\n\n[Install]\nWantedBy=multi-user.target\n")
+
+        # Create skeleton proxy
+        with open(os.path.join(app_dir, f'{app_id}.conf'), 'w') as f:
+            f.write(f"server {{\n    listen 80;\n    server_name {app_id}.local;\n\n    location / {{\n        proxy_pass http://127.0.0.1:8080;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n    }}\n}}\n")
+
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return str(e), 500
+
+
+
 @app.route('/api/apps/sync', methods=['POST'])
 @login_required
 def sync_apps():

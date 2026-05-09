@@ -583,7 +583,9 @@
 
                 // Editor state
                 const editingFile = ref(null)
-                const editorType = ref('compose') // compose, quadlet, proxy
+                const editorType = ref('compose') // compose, quadlet, proxy, app
+                const currentAppId = ref(null)
+                const currentAppFileType = ref(null)
                 const saveStatus = ref('')
                 let editorInstance = null
 
@@ -777,6 +779,51 @@ WantedBy=multi-user.target`
                         alert('Uninstall failed')
                     } finally {
                         app.installing = false
+                    }
+                }
+
+                const openAppEditor = async (appId, fileType) => {
+                    editingFile.value = `${appId} [${fileType}]`
+                    editorType.value = 'app'
+                    currentAppId.value = appId
+                    currentAppFileType.value = fileType
+                    saveStatus.value = 'Loading content...'
+
+                    try {
+                        const res = await fetch(`/api/apps/read?id=${appId}&type=${fileType}`)
+                        const content = res.ok ? await res.text() : ''
+                        let lang = 'yaml'
+                        if (fileType === 'json') lang = 'json'
+                        if (fileType === 'container') lang = 'ini'
+                        if (fileType === 'conf') lang = 'nginx'
+                        await setupEditor(content, lang)
+                    } catch (e) {
+                        saveStatus.value = 'Error opening: ' + e.message
+                    }
+                }
+
+                const createNewApp = async () => {
+                    const id = prompt("Enter new App ID (lowercase, no spaces):")
+                    if (!id) return
+                    if (!/^[a-z0-9-]+$/.test(id)) {
+                        alert("Invalid ID format. Use only lowercase letters, numbers, and hyphens.")
+                        return
+                    }
+                    try {
+                        const res = await fetch('/api/apps/create', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id })
+                        })
+                        if (res.ok) {
+                            fetchApps()
+                            openAppEditor(id, 'json')
+                        } else {
+                            const err = await res.text()
+                            alert('Create failed: ' + err)
+                        }
+                    } catch (e) {
+                        alert('Create failed')
                     }
                 }
 
@@ -997,23 +1044,31 @@ WantedBy=multi-user.target`
                     if(!editorInstance || !editingFile.value) return
                     saveStatus.value = 'Saving...'
                     let endpoint = '/api/files/save'
+                    let payload = { file: editingFile.value, content: editorInstance.getValue() }
+
                     if (editorType.value === 'quadlet') endpoint = '/api/podman/quadlets/save'
                     if (editorType.value === 'proxy') endpoint = '/api/nginx/proxies/save'
+                    if (editorType.value === 'app') {
+                        endpoint = '/api/apps/save'
+                        payload = {
+                            id: currentAppId.value,
+                            type: currentAppFileType.value,
+                            content: editorInstance.getValue()
+                        }
+                    }
                     
                     try {
                         const res = await fetch(endpoint, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                                file: editingFile.value, 
-                                content: editorInstance.getValue() 
-                            })
+                            body: JSON.stringify(payload)
                         })
                         if(res.ok) {
                             saveStatus.value = 'Saved successfully'
                             setTimeout(() => saveStatus.value = '', 2000)
                             if(editorType.value === 'quadlet') fetchQuadlets()
                             else if(editorType.value === 'proxy') fetchProxies()
+                            else if(editorType.value === 'app') fetchApps()
                             else fetchCompose()
                         } else {
                             const err = await res.text()
@@ -1079,7 +1134,7 @@ WantedBy=multi-user.target`
                     proxyFiles, selectedProxy, fetchProxies, removeProxy, openProxyEditor, createNewProxy,
                     tsAuthKey, commandOutput, tailscaleLogin,
 
-                    apps, repoUrl, fetchApps, installApp, uninstallApp, syncApps,
+                    apps, repoUrl, fetchApps, installApp, uninstallApp, syncApps, openAppEditor, createNewApp,
                     isAuthenticated, loginForm, loginError, login, logout, checkAuth,
 
                     selectedCompose, currentComposeLogs, fetchComposeLogs, toggleComposeLogs,

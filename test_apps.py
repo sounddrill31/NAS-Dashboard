@@ -124,5 +124,42 @@ def test_sync_apps(client, monkeypatch):
     # Check if git clone/pull was called
     assert any('git' in call and 'clone' in call or 'pull' in call for call in calls)
 
+
+def test_app_read(client):
+    response = client.get('/api/apps/read?id=searxng&type=json')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['name'] == 'SearXNG'
+
+    response2 = client.get('/api/apps/read?id=searxng&type=container')
+    assert response2.status_code == 200
+    assert b'[Container]' in response2.data
+
+def test_app_save(client):
+    new_json = {"name": "SearXNG_Modified", "port": 8888}
+    response = client.post('/api/apps/save', json={
+        "id": "searxng",
+        "type": "json",
+        "content": json.dumps(new_json)
+    })
+    assert response.status_code == 200
+
+    # Verify it saved
+    read_resp = client.get('/api/apps/read?id=searxng&type=json')
+    data = json.loads(read_resp.data)
+    assert data['name'] == 'SearXNG_Modified'
+    assert data['port'] == 8888
+
+def test_app_create(client):
+    response = client.post('/api/apps/create', json={"id": "newapp"})
+    assert response.status_code == 200
+
+    # Check if app exists in list
+    list_resp = client.get('/api/apps')
+    data = json.loads(list_resp.data)
+    names = [d.get('name') for d in data]
+    assert 'Newapp' in names
+
 if __name__ == '__main__':
+
     pytest.main(['-v', 'test_apps.py'])
