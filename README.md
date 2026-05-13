@@ -5,7 +5,7 @@ A modern, minimal, and playful system dashboard for Ublue/Fedora immutable distr
 ## Features
 - **Minimal Footprint:** Single-page frontend using Vue + Tailwind via CDN.
 - **Python Backend:** Lightweight Flask server to interface with systemd.
-- **Service Control:** Start, Stop, and Restart essential system services (`cockpit`, `novnc`, `nginx`, `sshd`, `tailscaled`).
+- **Service Control:** Start, Stop, and Restart essential system services (`cockpit`, `nginx`, `sshd`, `tailscaled`).
 - **mDNS Support:** Automatically configures your system to broadcast as `nasypeasy.local`.
 - **Perpetual Uptime:** Configured out-of-the-box as a resilient `systemd` service.
 

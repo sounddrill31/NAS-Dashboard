@@ -42,7 +42,6 @@ def admin_required(f):
 
 SERVICES = {
     'cockpit': 'cockpit.socket',
-    'novnc': 'novnc.service',
     'nginx': 'nas-nginx.service',
     'sshd': 'sshd.service',
     'tailscaled': 'tailscaled.service'

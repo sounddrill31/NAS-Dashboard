@@ -384,23 +384,48 @@
                         <button @click="syncApps" class="bg-black text-white px-8 py-2 font-bold uppercase hover:bg-gray-800 transition-colors">SYNC REPO</button>
                     </div>
 
-                    <div class="grid grid-cols-1 gap-2">
-                        <div v-for="app in apps" :key="app.id" class="border-2 border-black p-6 hover:bg-gray-50 transition-colors">
-                            <div class="flex justify-between items-start mb-4">
-                                <div>
-                                    <h3 class="text-2xl font-bold uppercase tracking-tight">{% raw %}{{ app.name }}{% endraw %}</h3>
-                                    <p class="text-xs opacity-60 uppercase">{% raw %}{{ app.description }}{% endraw %}</p>
+                    <!-- Installed Apps -->
+                    <div v-if="installedApps.length > 0">
+                        <h3 class="text-xl font-bold uppercase tracking-tighter mt-8 mb-4 border-b-2 border-black pb-2">INSTALLED APPS</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div v-for="app in installedApps" :key="app.id" class="border-2 border-black p-6 bg-gray-50 hover:bg-black hover:text-white transition-all group flex flex-col h-full relative overflow-hidden">
+                                <div class="absolute inset-0 diagonal-stripes opacity-5 group-hover:opacity-20 pointer-events-none"></div>
+                                <div class="relative z-10 flex flex-col h-full">
+                                    <div class="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h4 class="text-2xl font-bold uppercase tracking-tight">{% raw %}{{ app.name }}{% endraw %}</h4>
+                                            <p class="text-[10px] opacity-60 uppercase mt-1">{% raw %}{{ app.description }}{% endraw %}</p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-auto pt-6 flex flex-col sm:flex-row gap-2 w-full">
+                                        <a :href="'http://' + localIp + ':8080/' + app.id + '/'" target="_blank" class="flex-1 bg-black text-white group-hover:bg-white group-hover:text-black border-2 border-black group-hover:border-white px-4 py-2 text-xs font-bold uppercase tracking-widest text-center transition-colors">OPEN</a>
+                                        <button @click="uninstallApp(app)" class="flex-1 border-2 border-black group-hover:border-white px-4 py-2 text-xs font-bold uppercase tracking-widest hover:bg-red-600 hover:text-white group-hover:hover:bg-red-500 group-hover:hover:text-white group-hover:hover:border-red-500 transition-colors text-center">UNINSTALL</button>
+                                    </div>
                                 </div>
-                                <span class="text-[10px] font-bold border border-black px-2 py-0.5 uppercase" :class="app.installed ? 'bg-black text-white' : (app.coming_soon ? 'bg-gray-200 text-gray-500 border-gray-200' : '')">
-                                    {% raw %}{{ app.coming_soon ? 'COMING SOON' : (app.installed ? 'INSTALLED' : 'AVAILABLE') }}{% endraw %}
-                                </span>
                             </div>
-                            <div v-if="!app.coming_soon" class="flex flex-wrap justify-start gap-2 mt-4 w-full">
-                                <button v-if="!app.installed" @click="installApp(app)" class="flex-1 sm:flex-none bg-black text-white px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-gray-800 transition-colors text-center whitespace-nowrap">INSTALL</button>
-                                <button v-else @click="uninstallApp(app)" class="flex-1 sm:flex-none bg-black text-white px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-gray-800 transition-colors text-center whitespace-nowrap">UNINSTALL</button>
-                                <button @click="openAppEditor(app.id, 'json')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">MANIFEST</button>
-                                <button @click="openAppEditor(app.id, 'container')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">CONTAINER</button>
-                                <button @click="openAppEditor(app.id, 'conf')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">PROXY</button>
+                        </div>
+                    </div>
+
+                    <!-- Available Apps -->
+                    <div>
+                        <h3 class="text-xl font-bold uppercase tracking-tighter mt-8 mb-4 border-b-2 border-black pb-2">AVAILABLE CATALOG</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div v-for="app in availableApps" :key="app.id" class="border-2 border-black p-4 hover:bg-gray-50 transition-colors flex flex-col h-full">
+                                <div class="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h4 class="text-xl font-bold uppercase tracking-tight">{% raw %}{{ app.name }}{% endraw %}</h4>
+                                        <p class="text-[10px] opacity-60 uppercase mt-1">{% raw %}{{ app.description }}{% endraw %}</p>
+                                    </div>
+                                    <span class="text-[10px] font-bold border border-black px-2 py-0.5 uppercase shrink-0 ml-2" :class="app.coming_soon ? 'bg-gray-200 text-gray-500 border-gray-200' : ''">
+                                        {% raw %}{{ app.coming_soon ? 'COMING SOON' : 'AVAILABLE' }}{% endraw %}
+                                    </span>
+                                </div>
+                                <div v-if="!app.coming_soon" class="mt-auto pt-4 flex flex-wrap justify-start gap-2 w-full">
+                                    <button @click="installApp(app)" class="flex-1 sm:flex-none bg-black text-white px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-gray-800 transition-colors text-center whitespace-nowrap">INSTALL</button>
+                                    <button @click="openAppEditor(app.id, 'json')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">MANIFEST</button>
+                                    <button @click="openAppEditor(app.id, 'container')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">CONTAINER</button>
+                                    <button @click="openAppEditor(app.id, 'conf')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">PROXY</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -445,10 +470,6 @@
                                 <div class="font-bold uppercase tracking-tight">Cockpit</div>
                                 <div class="text-[10px] opacity-60">System Administration</div>
                             </a>
-                            <button @click="openNoVnc" class="block border-2 border-black p-4 hover:bg-black hover:text-white transition-all bg-white/80 w-full text-left">
-                                <div class="font-bold uppercase tracking-tight">noVNC</div>
-                                <div class="text-[10px] opacity-60">Remote Desktop</div>
-                            </button>
                         </div>
                     </div>
                 </div>
