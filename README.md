@@ -5,21 +5,43 @@ A modern, minimal, and playful system dashboard for Ublue/Fedora immutable distr
 ## Features
 - **Minimal Footprint:** Single-page frontend using Vue + Tailwind via CDN.
 - **Python Backend:** Lightweight Flask server to interface with systemd.
-- **Service Control:** Start, Stop, and Restart essential system services (`cockpit`, `novnc`, `nginx`, `sshd`, `tailscaled`).
+- **Service Control:** Start, Stop, and Restart essential system services (`cockpit`, `nginx`, `sshd`, `tailscaled`).
 - **mDNS Support:** Automatically configures your system to broadcast as `nasypeasy.local`.
 - **Perpetual Uptime:** Configured out-of-the-box as a resilient `systemd` service.
 
+
 ## Installation
 
-Clone the repository and run the Python install script. You can customize the installation using environment variables:
+### Prerequisites
+Before installing, ensure the following system services are installed via your system package manager (they do not need to be running, but must be installed):
+- `cockpit`
+- `tailscale` (`tailscaled`)
+
+Example for Fedora/Ublue:
+```bash
+sudo dnf install cockpit tailscale
+```
+
+### ⚡ Quick Start (Unprivileged)
+
+Install **Pixi**, then set up the dashboard in your home directory:
 
 ```bash
-# Default installation (to /var/opt/nas-dashboard, port 8000)
-sudo python3 install.py
+# 1. Install Pixi
+curl -fsSL https://pixi.sh/install.sh | bash
 
-# Custom installation example
-sudo PORT=9000 INSTALL_DIR=/custom/path SKIP_SYSTEM_CONFIG=true python3 install.py
+# 2. Run the User-Level Setup
+pixi run setup-dashboard
+
+# 3. (Optional) Run Privileged Setup (Linger, Firewall, Hostname)
+pixi run setup-privileged
 ```
+
+The dashboard will be running as a user service at `~/.config/systemd/user/nas-dashboard.service`.
+
+### Fallback Access
+- **Local**: `http://localhost:8000/`
+- **Branded**: `http://localhost:8000/nasypeasy`
 
 ### Configuration Variables:
 - `INSTALL_DIR`: Where the app files will be stored (default: `/var/opt/nas-dashboard`)

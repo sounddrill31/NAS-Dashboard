@@ -1,0 +1,21 @@
+[Unit]
+Description=Filebrowser NAS interface
+After=network-online.target
+
+[Container]
+Image=docker.io/filebrowser/filebrowser:latest
+# Run as the unprivileged user inside the container matching our UID if possible, or just let podman handle it
+# Map the user's home directory (or a specific storage directory) to /srv
+Volume=%h/storage:/srv:Z
+# Map a directory for the database and settings
+Volume=%h/.config/filebrowser:/database:Z
+Environment=FB_DATABASE=/database/filebrowser.db
+
+# Publish port
+PublishPort=8081:80
+
+[Service]
+ExecStartPre=-/usr/bin/mkdir -p %h/storage %h/.config/filebrowser
+
+[Install]
+WantedBy=default.target

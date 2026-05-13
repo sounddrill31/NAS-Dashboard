@@ -1,0 +1,27 @@
+[workspace]
+name = "nas-dashboard"
+version = "0.1.0"
+description = "NAS Services Dashboard"
+authors = ["84176052+sounddrill31 <84176052+sounddrill31@users.noreply.github.com>"]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = "3.12.*"
+flask = ">=3.0.3"
+pytest = ">=8.0.0"
+duckdb = ">=1.1.0"
+nginx = ">=1.26.0"
+websockify = ">=0.13.0"
+
+[tasks]
+start = "python app.py"
+install = {cmd="python post-install.py", depends-on="setup-privileged"}
+setup-privileged = "sudo bash install.sh"
+check-status = "./nas-ctl.sh status"
+shell = "./nas-ctl.sh shell"
+start-dashboard = "./nas-ctl.sh start"
+stop-dashboard = "./nas-ctl.sh stop"
+restart-dashboard = "./nas-ctl.sh restart"
+logs = "./nas-ctl.sh logs"
+test = "pytest test_apps.py"
