@@ -1,1 +1,4 @@
 context-*/__pycache__
+static
+.pixi
+!.pixi/config.toml

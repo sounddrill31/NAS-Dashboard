@@ -2,7 +2,7 @@
 name = "nas-dashboard"
 version = "0.1.0"
 description = "NAS Services Dashboard"
-authors = ["Souhrud", "Amartha"]
+authors = ["84176052+sounddrill31 <84176052+sounddrill31@users.noreply.github.com>"]
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 
