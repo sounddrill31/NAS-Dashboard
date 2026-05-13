@@ -1,0 +1,6 @@
+version: '3'
+services:
+  hello-world:
+    image: alpine
+    command: echo 'Hello from Podman Compose'
+

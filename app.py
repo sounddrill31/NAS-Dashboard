@@ -1,5 +1,6 @@
 
-from flask import Flask, jsonify, request, render_template, session
+from flask import Flask, jsonify, request, render_template, session, redirect
+from pathlib import Path
 import subprocess
 import urllib.request
 import socket
@@ -7,7 +8,7 @@ import os
 import json
 import re
 import shutil
-from pysqlcipher3 import dbapi2 as sqlite
+import duckdb
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
@@ -29,65 +30,75 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def admin_required(f):
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if session.get('username') != 'admin':
+            return jsonify({"error": "Forbidden: Admin access required"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 SERVICES = {
     'cockpit': 'cockpit.socket',
     'novnc': 'novnc.service',
-    'nginx': 'nginx.service',
+    'nginx': 'nas-nginx.service',
     'sshd': 'sshd.service',
     'tailscaled': 'tailscaled.service'
 }
 
-COMPOSE_DIR = os.environ.get('COMPOSE_DIR', "/var/opt/nas-dashboard/compose")
-QUADLET_DIR = os.environ.get('QUADLET_DIR', "/etc/containers/systemd")
-NGINX_DIR = os.environ.get('NGINX_DIR', "/etc/nginx/conf.d")
-APPS_DIR = os.environ.get('APPS_DIR', "/var/opt/nas-dashboard/apps")
-AUTH_DB_PATH = os.environ.get('AUTH_DB_PATH', "./auth.db")
-DB_PASSWORD = os.environ.get('DB_PASSWORD', "default_secret_key_change_me")
+# Configuration - Default to User Home
+BASE_DIR = Path.home() / ".local/share/nas-dashboard"
+COMPOSE_DIR = Path(os.environ.get('COMPOSE_DIR', str(BASE_DIR / "compose")))
+QUADLET_DIR = Path(os.environ.get('QUADLET_DIR', str(Path.home() / ".config/containers/systemd")))
+NGINX_DIR = Path(os.environ.get('NGINX_DIR', str(BASE_DIR / "nginx/conf.d")))
+APPS_DIR = Path(os.environ.get('APPS_DIR', str(BASE_DIR / "apps")))
+AUTH_DB_PATH = Path(os.environ.get('AUTH_DB_PATH', str(BASE_DIR / "auth.db")))
 
-for d in [COMPOSE_DIR, QUADLET_DIR, NGINX_DIR, APPS_DIR]:
-    if not os.path.exists(d):
-        try:
-            os.makedirs(d, exist_ok=True)
-        except:
-            pass
+for d in [COMPOSE_DIR, QUADLET_DIR, NGINX_DIR, APPS_DIR, BASE_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
 
 def init_db():
     # Make sure parent dir exists
     os.makedirs(os.path.dirname(AUTH_DB_PATH), exist_ok=True)
-    conn = sqlite.connect(AUTH_DB_PATH)
-    conn.execute(f"PRAGMA key='{DB_PASSWORD}'")
+    conn = duckdb.connect(AUTH_DB_PATH)
 
-    # Try to execute something to check if the password is correct/db is init
-    try:
-        conn.execute("SELECT count(*) FROM sqlite_master;")
-    except sqlite.DatabaseError:
-        print("Database key is incorrect or database is corrupted.")
-        return
-
-    cursor = conn.cursor()
-    cursor.execute('''
+    conn.execute("CREATE SEQUENCE IF NOT EXISTS users_id_seq;")
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY DEFAULT nextval('users_id_seq'),
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL
         )
     ''')
-
-    # Create default admin user if no users exist
-    cursor.execute("SELECT count(*) FROM users")
-    if cursor.fetchone()[0] == 0:
-        default_hash = generate_password_hash('admin')
-        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", ('admin', default_hash))
-
-    conn.commit()
     conn.close()
 
 init_db()
 
+def is_setup_required():
+    if not os.path.exists(AUTH_DB_PATH):
+        return True
+    try:
+        conn = duckdb.connect(AUTH_DB_PATH)
+        res = conn.execute("SELECT count(*) FROM users").fetchone()
+        conn.close()
+        return res[0] == 0
+    except:
+        return True
+
+def is_system_service(unit):
+    return unit in ['cockpit.socket', 'sshd.service', 'tailscaled.service', 'firewalld.service', 'avahi-daemon.service']
+
 def get_service_status(unit):
     try:
-        result = subprocess.run(['systemctl', 'is-active', unit], capture_output=True, text=True, timeout=2)
+        cmd = ['systemctl', 'is-active', unit]
+        if is_system_service(unit):
+            cmd.insert(0, 'sudo')
+        else:
+            cmd.insert(1, '--user')
+            
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
         status = result.stdout.strip()
         if not status:
             return "unknown"
@@ -96,14 +107,19 @@ def get_service_status(unit):
         return "error"
 
 def run_systemctl_action(unit, action):
-    # Allow any .service or .socket unit if it's a quadlet or in SERVICES
+    # Allow any .service or .socket unit
     is_valid = unit in SERVICES.values() or unit.endswith('.service') or unit.endswith('.socket')
     if not is_valid:
         return False, "Invalid service"
     if action not in ['start', 'stop', 'restart', 'enable', 'disable']:
         return False, "Invalid action"
     try:
-        subprocess.run(['systemctl', action, unit], check=True, timeout=10)
+        cmd = ['systemctl', action, unit]
+        if is_system_service(unit):
+            cmd.insert(0, 'sudo')
+        else:
+            cmd.insert(1, '--user')
+        subprocess.run(cmd, check=True, timeout=10)
         return True, "Success"
     except Exception as e:
         return False, str(e)
@@ -119,14 +135,11 @@ def login():
         return jsonify({"error": "Missing credentials"}), 400
 
     try:
-        conn = sqlite.connect(AUTH_DB_PATH)
-        conn.execute(f"PRAGMA key='{DB_PASSWORD}'")
-        cursor = conn.cursor()
-        cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
-        row = cursor.fetchone()
+        conn = duckdb.connect(AUTH_DB_PATH)
+        res = conn.execute("SELECT password FROM users WHERE username = ?", (username,)).fetchone()
         conn.close()
 
-        if row and check_password_hash(row[0], password):
+        if res and check_password_hash(res[0], password):
             session['logged_in'] = True
             session['username'] = username
             return jsonify({"status": "success"})
@@ -144,13 +157,110 @@ def logout():
 @app.route('/api/auth/status', methods=['GET'])
 def auth_status():
     if app.config.get('TESTING') and not app.config.get('REQUIRE_AUTH', True):
-         return jsonify({"authenticated": True})
-    return jsonify({"authenticated": 'logged_in' in session})
+         return jsonify({"authenticated": True, "isAdmin": True})
+    return jsonify({
+        "authenticated": 'logged_in' in session,
+        "isAdmin": session.get('username') == 'admin'
+    })
+
+# User Management Endpoints (Admin Only)
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required
+def list_users():
+    try:
+        conn = duckdb.connect(AUTH_DB_PATH)
+        res = conn.execute("SELECT username FROM users").fetchall()
+        conn.close()
+        return jsonify([row[0] for row in res])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/users', methods=['POST'])
+@admin_required
+def add_user():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({"error": "Username and password required"}), 400
+    try:
+        conn = duckdb.connect(AUTH_DB_PATH)
+        hash = generate_password_hash(password)
+        conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hash))
+        conn.close()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": "Username already exists or database error"}), 400
+
+@app.route('/api/admin/users/<username>', methods=['DELETE'])
+@admin_required
+def delete_user(username):
+    if username == 'admin':
+        return jsonify({"error": "Cannot delete admin user"}), 400
+    try:
+        conn = duckdb.connect(AUTH_DB_PATH)
+        conn.execute("DELETE FROM users WHERE username = ?", (username,))
+        conn.close()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/')
-
+@app.route('/nasypeasy')
 def index():
+    if is_setup_required():
+        return redirect('/setup')
+    if 'logged_in' not in session:
+        return redirect('/login')
     return render_template('index.html')
+
+@app.route('/login')
+@app.route('/nasypeasy/login')
+def login_page():
+    if is_setup_required():
+        return redirect('/setup')
+    if 'logged_in' in session:
+        return redirect('/')
+    return render_template('login.html', local_ip=local_ip())
+
+@app.route('/setup')
+@app.route('/nasypeasy/setup')
+def setup_page():
+    if not is_setup_required():
+        return redirect('/login')
+    return render_template('setup.html', local_ip=local_ip())
+
+@app.route('/api/setup', methods=['POST'])
+def setup_admin():
+    if not is_setup_required():
+        return jsonify({"error": "Setup already completed"}), 400
+    
+    data = request.json
+    password = data.get('password')
+    hostname = data.get('hostname')
+
+    if not password:
+        return jsonify({"error": "Admin password is required"}), 400
+
+    try:
+        # 1. Create admin user
+        conn = duckdb.connect(AUTH_DB_PATH)
+        hash = generate_password_hash(password)
+        conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ('admin', hash))
+        conn.close()
+
+        # 2. Handle hostname/mDNS if provided
+        if hostname:
+            try:
+                subprocess.run(['sudo', 'hostnamectl', 'set-hostname', hostname], check=True, timeout=5)
+            except Exception as e:
+                print(f"⚠️ Failed to set hostname via sudo: {e}")
+                # We don't fail the whole setup, but we could return info to the UI
+                # For now, just continue so the user can at least log in.
+
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/public-ip')
 def public_ip():
@@ -215,7 +325,12 @@ def get_logs():
     if not is_valid:
         return jsonify({"status": "error", "message": "Invalid service"}), 400
     try:
-        result = subprocess.run(['journalctl', '-u', unit, '-n', '50', '--no-pager'], capture_output=True, text=True, timeout=5)
+        cmd = ['journalctl', '-u', unit, '-n', '50', '--no-pager']
+        if is_system_service(unit):
+            cmd.insert(0, 'sudo')
+        else:
+            cmd.insert(1, '--user')
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         return result.stdout
     except Exception as e:
         return str(e), 500
@@ -241,7 +356,7 @@ def read_quadlet():
     filename = request.args.get('file')
     if not filename: return "Filename required", 400
     safe_path = os.path.normpath(os.path.join(QUADLET_DIR, filename))
-    if not safe_path.startswith(QUADLET_DIR): return "Unauthorized", 403
+    if not safe_path.startswith(str(QUADLET_DIR)): return "Unauthorized", 403
     try:
         if not os.path.exists(safe_path): return ""
         with open(safe_path, 'r') as f: return f.read()
@@ -257,11 +372,11 @@ def save_quadlet():
     if not filename.endswith('.container'):
         return "Only .container files allowed", 400
     safe_path = os.path.normpath(os.path.join(QUADLET_DIR, filename))
-    if not safe_path.startswith(QUADLET_DIR): return "Unauthorized", 403
+    if not safe_path.startswith(str(QUADLET_DIR)): return "Unauthorized", 403
     try:
         with open(safe_path, 'w') as f: f.write(content)
         # Trigger daemon-reload to pick up changes
-        subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+        subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True, timeout=10)
         return jsonify({"status": "success"})
     except Exception as e: return str(e), 500
 
@@ -272,11 +387,11 @@ def remove_quadlet():
     filename = data.get('file')
     if not filename: return "Filename required", 400
     safe_path = os.path.normpath(os.path.join(QUADLET_DIR, filename))
-    if not safe_path.startswith(QUADLET_DIR): return "Unauthorized", 403
+    if not safe_path.startswith(str(QUADLET_DIR)): return "Unauthorized", 403
     try:
         if os.path.exists(safe_path):
             os.remove(safe_path)
-            subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+            subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True, timeout=10)
         return jsonify({"status": "success"})
     except Exception as e: return str(e), 500
 
@@ -293,7 +408,7 @@ def read_proxy():
     filename = request.args.get('file')
     if not filename: return "Filename required", 400
     safe_path = os.path.normpath(os.path.join(NGINX_DIR, filename))
-    if not safe_path.startswith(NGINX_DIR): return "Unauthorized", 403
+    if not safe_path.startswith(str(NGINX_DIR)): return "Unauthorized", 403
     try:
         if not os.path.exists(safe_path): return ""
         with open(safe_path, 'r') as f: return f.read()
@@ -309,13 +424,12 @@ def save_proxy():
     if not filename.endswith('.conf'):
         return "Only .conf files allowed", 400
     safe_path = os.path.normpath(os.path.join(NGINX_DIR, filename))
-    if not safe_path.startswith(NGINX_DIR): return "Unauthorized", 403
+    if not safe_path.startswith(str(NGINX_DIR)): return "Unauthorized", 403
     try:
         with open(safe_path, 'w') as f: f.write(content)
         # Check if nginx is running and reload it
         if shutil.which('nginx'):
-            subprocess.run(['nginx', '-t'], check=True, timeout=5) # Test config
-            subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+            subprocess.run(['systemctl', '--user', 'restart', 'nas-nginx.service'], check=True, timeout=10)
         return jsonify({"status": "success"})
     except Exception as e: return str(e), 500
 
@@ -326,12 +440,12 @@ def remove_proxy():
     filename = data.get('file')
     if not filename: return "Filename required", 400
     safe_path = os.path.normpath(os.path.join(NGINX_DIR, filename))
-    if not safe_path.startswith(NGINX_DIR): return "Unauthorized", 403
+    if not safe_path.startswith(str(NGINX_DIR)): return "Unauthorized", 403
     try:
         if os.path.exists(safe_path):
             os.remove(safe_path)
             if shutil.which('nginx'):
-                subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+                subprocess.run(['nginx', '-s', 'reload', '-e', 'stderr', '-c', str(BASE_DIR / 'nginx/nginx.conf'), '-p', str(BASE_DIR / 'nginx')], check=True, timeout=10)
         return jsonify({"status": "success"})
     except Exception as e: return str(e), 500
 
@@ -381,7 +495,7 @@ def compose_logs():
     if not filename:
         return "Filename required", 400
     safe_path = os.path.normpath(os.path.join(COMPOSE_DIR, filename))
-    if not safe_path.startswith(COMPOSE_DIR):
+    if not safe_path.startswith(str(COMPOSE_DIR)):
         return "Unauthorized", 403
     try:
         provider = None
@@ -403,11 +517,11 @@ def compose_logs():
 def list_firewall():
     try:
         # Get standard (IN) ports
-        res_in = subprocess.run(['firewall-cmd', '--list-ports'], capture_output=True, text=True, timeout=5)
+        res_in = subprocess.run(['sudo', 'firewall-cmd', '--list-ports'], capture_output=True, text=True, timeout=5)
         in_rules = [f"{p.upper()}/IN" for p in res_in.stdout.strip().split()]
         
         # Get rich rules (OUT)
-        res_rich = subprocess.run(['firewall-cmd', '--list-rich-rules'], capture_output=True, text=True, timeout=5)
+        res_rich = subprocess.run(['sudo', 'firewall-cmd', '--list-rich-rules'], capture_output=True, text=True, timeout=5)
         out_rules = []
         for line in res_rich.stdout.strip().split('\n'):
             if not line.strip(): continue
@@ -449,7 +563,7 @@ def tailscale_up():
     if not authkey:
         return jsonify({"status": "error", "message": "Authkey required"}), 400
     try:
-        result = subprocess.run(['tailscale', 'up', '--authkey', authkey, '--reset'], capture_output=True, text=True, timeout=30)
+        result = subprocess.run(['sudo', 'tailscale', 'up', '--authkey', authkey, '--reset'], capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             return jsonify({"status": "success", "output": result.stdout or "Tailscale is up."})
         else:
@@ -462,7 +576,7 @@ def read_file_content():
     filename = request.args.get('file')
     if not filename: return "Filename required", 400
     safe_path = os.path.normpath(os.path.join(COMPOSE_DIR, filename))
-    if not safe_path.startswith(COMPOSE_DIR): return "Unauthorized", 403
+    if not safe_path.startswith(str(COMPOSE_DIR)): return "Unauthorized", 403
     try:
         if not os.path.exists(safe_path): return ""
         with open(safe_path, 'r') as f: return f.read()
@@ -478,7 +592,7 @@ def save_file_content():
     if not (filename.endswith('.yml') or filename.endswith('.yaml')):
         return "Only .yml or .yaml files allowed", 400
     safe_path = os.path.normpath(os.path.join(COMPOSE_DIR, filename))
-    if not safe_path.startswith(COMPOSE_DIR): return "Unauthorized", 403
+    if not safe_path.startswith(str(COMPOSE_DIR)): return "Unauthorized", 403
     try:
         with open(safe_path, 'w') as f: f.write(content)
         return jsonify({"status": "success"})
@@ -524,36 +638,67 @@ def install_app():
     app_id = data.get('id')
     if not app_id: return "App ID required", 400
 
+    # Custom install payload
+    container_content = data.get('container_content')
+    route = data.get('route')
+    target_port = data.get('port')
+
     app_dir = os.path.join(APPS_DIR, app_id)
     if not os.path.exists(app_dir): return "App not found", 404
 
     try:
-        # Install Quadlet
-        container_files = [f for f in os.listdir(app_dir) if f.endswith('.container')]
-        for f in container_files:
-            src = os.path.join(app_dir, f)
-            dst = os.path.join(QUADLET_DIR, f)
-            shutil.copy2(src, dst)
+        container_files = []
+        conf_files = []
 
-        # Install Nginx Config
-        conf_files = [f for f in os.listdir(app_dir) if f.endswith('.conf')]
-        for f in conf_files:
-            src = os.path.join(app_dir, f)
-            dst = os.path.join(NGINX_DIR, f)
-            shutil.copy2(src, dst)
+        if container_content:
+            # Custom container spec provided
+            container_path = os.path.join(QUADLET_DIR, f"{app_id}.container")
+            with open(container_path, 'w') as f:
+                f.write(container_content)
+            container_files.append(f"{app_id}.container")
+
+            if route and target_port:
+                # Ensure route starts with /
+                if not route.startswith('/'): route = '/' + route
+                conf_path = os.path.join(NGINX_DIR, f"{app_id}.conf")
+                nginx_conf = f"""
+location {route}/ {{
+    proxy_pass http://127.0.0.1:{target_port}/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}}
+"""
+                with open(conf_path, 'w') as f:
+                    f.write(nginx_conf)
+                conf_files.append(f"{app_id}.conf")
+        else:
+            # Legacy/default install logic
+            container_files = [f for f in os.listdir(app_dir) if f.endswith('.container')]
+            for f in container_files:
+                src = os.path.join(app_dir, f)
+                dst = os.path.join(QUADLET_DIR, f)
+                shutil.copy2(src, dst)
+
+            conf_files = [f for f in os.listdir(app_dir) if f.endswith('.conf')]
+            for f in conf_files:
+                src = os.path.join(app_dir, f)
+                dst = os.path.join(NGINX_DIR, f)
+                shutil.copy2(src, dst)
 
         # Reload systemd
         if container_files:
-            subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+            subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True, timeout=10)
             for f in container_files:
                 service_name = f.replace('.container', '.service')
                 # Try to enable and start, but don't fail if it doesn't work immediately
-                subprocess.run(['systemctl', 'enable', '--now', service_name], timeout=30)
+                subprocess.run(['systemctl', '--user', 'enable', '--now', service_name], timeout=30)
 
         # Reload nginx
         if conf_files:
             if shutil.which('nginx'):
-                subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+                subprocess.run(['nginx', '-s', 'reload', '-e', 'stderr', '-c', str(BASE_DIR / 'nginx/nginx.conf'), '-p', str(BASE_DIR / 'nginx')], check=True, timeout=10)
 
         return jsonify({"status": "success"})
     except Exception as e:
@@ -574,7 +719,8 @@ def uninstall_app():
         for f in container_files:
             service_name = f.replace('.container', '.service')
             try:
-                subprocess.run(['systemctl', 'disable', '--now', service_name], timeout=30)
+                subprocess.run(['systemctl', '--user'
+, 'disable', '--now', service_name], timeout=30)
             except:
                 pass
             dst = os.path.join(QUADLET_DIR, f)
@@ -588,11 +734,11 @@ def uninstall_app():
                 os.remove(dst)
 
         if container_files:
-            subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+            subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True, timeout=10)
 
         if conf_files:
             if shutil.which('nginx'):
-                subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+                subprocess.run(['nginx', '-s', 'reload', '-e', 'stderr', '-c', str(BASE_DIR / 'nginx/nginx.conf'), '-p', str(BASE_DIR / 'nginx')], check=True, timeout=10)
 
         return jsonify({"status": "success"})
     except Exception as e:
@@ -609,7 +755,7 @@ def read_app_file():
         return "Invalid request", 400
 
     app_dir = os.path.normpath(os.path.join(APPS_DIR, app_id))
-    if not app_dir.startswith(APPS_DIR) or not os.path.exists(app_dir):
+    if not app_dir.startswith(str(APPS_DIR)) or not os.path.exists(app_dir):
         return "App not found", 404
 
     filename = 'app.json'
@@ -642,7 +788,7 @@ def save_app_file():
         return "Invalid request", 400
 
     app_dir = os.path.normpath(os.path.join(APPS_DIR, app_id))
-    if not app_dir.startswith(APPS_DIR):
+    if not app_dir.startswith(str(APPS_DIR)):
         return "Unauthorized", 403
 
     if not os.path.exists(app_dir):
@@ -674,7 +820,7 @@ def create_app():
         return "App ID required", 400
 
     app_dir = os.path.normpath(os.path.join(APPS_DIR, app_id))
-    if not app_dir.startswith(APPS_DIR):
+    if not app_dir.startswith(str(APPS_DIR)):
         return "Unauthorized", 403
 
     if os.path.exists(app_dir):
@@ -697,7 +843,7 @@ def create_app():
 
         # Create skeleton proxy
         with open(os.path.join(app_dir, f'{app_id}.conf'), 'w') as f:
-            f.write(f"server {{\n    listen 80;\n    server_name {app_id}.local;\n\n    location / {{\n        proxy_pass http://127.0.0.1:8080;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n    }}\n}}\n")
+            f.write(f"location /{app_id}/ {{\n    proxy_pass http://127.0.0.1:8080/;\n    proxy_set_header Host $host;\n    proxy_set_header X-Real-IP $remote_addr;\n}}\n")
 
         return jsonify({"status": "success"})
     except Exception as e:
@@ -727,6 +873,30 @@ def sync_apps():
             subprocess.run(['git', 'clone', repo_url, APPS_DIR], check=True, timeout=60)
 
         return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/vnc/proxy', methods=['POST'])
+@login_required
+def vnc_proxy():
+    data = request.json
+    target_host = data.get('host', 'localhost')
+    target_port = data.get('port', 5900)
+    listen_port = data.get('listen', 6080)
+    
+    try:
+        # Check if already running
+        # We'll use a simple approach: try to start websockify
+        # If it fails due to port in use, we assume it's already there or handled
+        cmd = [
+            'websockify', 
+            '-D', 
+            '--web', str(BASE_DIR / 'static/novnc'),
+            f"0.0.0.0:{listen_port}", 
+            f"{target_host}:{target_port}"
+        ]
+        subprocess.run(cmd, check=True)
+        return jsonify({"status": "success", "url": f"http://{local_ip()}:{listen_port}/vnc.html"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

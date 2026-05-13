@@ -1,5 +1,5 @@
 {
   "name": "Jellyfin",
-  "description": "The Free Software Media System.",
-  "port": 8096
+  "description": "Media Server",
+  "coming_soon": true
 }

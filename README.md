@@ -12,20 +12,36 @@ A modern, minimal, and playful system dashboard for Ublue/Fedora immutable distr
 
 ## Installation
 
-Clone the repository and run the Python install script. You can customize the installation using environment variables:
+### Prerequisites
+Before installing, ensure the following system services are installed via your system package manager (they do not need to be running, but must be installed):
+- `cockpit`
+- `tailscale` (`tailscaled`)
 
-**Note for Ubuntu/Debian users:** You must install `libsqlcipher-dev` before running the installation to support the encrypted authentication database.
+Example for Fedora/Ublue:
 ```bash
-sudo apt-get update && sudo apt-get install libsqlcipher-dev
+sudo dnf install cockpit tailscale
 ```
 
-```bash
-# Default installation (to /var/opt/nas-dashboard, port 8000)
-sudo python3 install.py
+### ⚡ Quick Start (Unprivileged)
 
-# Custom installation example
-sudo PORT=9000 INSTALL_DIR=/custom/path SKIP_SYSTEM_CONFIG=true python3 install.py
+Install **Pixi**, then set up the dashboard in your home directory:
+
+```bash
+# 1. Install Pixi
+curl -fsSL https://pixi.sh/install.sh | bash
+
+# 2. Run the User-Level Setup
+pixi run setup-dashboard
+
+# 3. (Optional) Run Privileged Setup (Linger, Firewall, Hostname)
+pixi run setup-privileged
 ```
+
+The dashboard will be running as a user service at `~/.config/systemd/user/nas-dashboard.service`.
+
+### Fallback Access
+- **Local**: `http://localhost:8000/`
+- **Branded**: `http://localhost:8000/nasypeasy`
 
 ### Configuration Variables:
 - `INSTALL_DIR`: Where the app files will be stored (default: `/var/opt/nas-dashboard`)

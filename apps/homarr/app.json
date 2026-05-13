@@ -1,5 +1,5 @@
 {
   "name": "Homarr",
-  "description": "Customizable homepage for your server.",
-  "port": 7575
+  "description": "Dashboard",
+  "coming_soon": true
 }

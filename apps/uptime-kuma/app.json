@@ -1,5 +1,5 @@
 {
   "name": "Uptime Kuma",
-  "description": "A fancy self-hosted monitoring tool.",
-  "port": 3001
+  "description": "Monitoring Tool",
+  "coming_soon": true
 }

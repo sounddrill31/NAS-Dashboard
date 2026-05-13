@@ -33,10 +33,23 @@
         }
         [v-cloak] { display: none; }
         #monaco-container { flex: 1; min-height: 400px; border: 2px solid black; }
+        .mono-input {
+            width: 100%;
+            background: transparent;
+            border: 2px solid black;
+            padding: 0.75rem;
+            font-size: 0.875rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .mono-input:focus { background: #000; color: #fff; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
-    <div id="app" v-cloak>
+    <div id="app" v-cloak class="min-h-screen flex flex-col">
+        
         <!-- Monaco Editor Modal -->
         <div v-show="editingFile" class="fixed inset-0 z-[100] bg-white flex flex-col p-6 overflow-hidden">
             <div class="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
@@ -67,6 +80,42 @@
             </div>
         </div>
 
+        <!-- Install App Modal -->
+        <div v-if="showInstallModal" class="fixed inset-0 z-[115] bg-black/50 flex items-center justify-center p-6">
+            <div class="bg-white border-4 border-black p-8 max-w-2xl w-full flex flex-col relative">
+                <div class="absolute -top-6 -left-6 bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-widest">APP INSTALLER</div>
+                <div class="mb-6 border-b-2 border-black pb-4">
+                    <h2 class="text-3xl font-bold uppercase tracking-tighter">{% raw %}{{ installForm.name }}{% endraw %}</h2>
+                    <p class="text-[10px] font-bold uppercase tracking-widest opacity-60">Configure application routing and container parameters.</p>
+                </div>
+                
+                <form @submit.prevent="confirmInstall" class="space-y-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] font-bold uppercase tracking-widest block mb-1">ACCESS ROUTE</label>
+                            <input v-model="installForm.route" type="text" class="mono-input" placeholder="/appname" required>
+                            <span class="text-[8px] font-bold opacity-40">EG: /{% raw %}{{ installForm.id }}{% endraw %}</span>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold uppercase tracking-widest block mb-1">INTERNAL PORT</label>
+                            <input v-model="installForm.port" type="number" class="mono-input" placeholder="8080" required>
+                            <span class="text-[8px] font-bold opacity-40">TARGET CONTAINER PORT</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-widest block mb-1">CONTAINER SPECIFICATION (QUADLET)</label>
+                        <textarea v-model="installForm.container_content" class="mono-input font-mono text-[10px]" rows="10" required></textarea>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row justify-end gap-4 mt-4">
+                        <button type="button" @click="showInstallModal = false" class="w-full sm:w-auto border-2 border-black px-8 py-3 font-bold uppercase tracking-widest hover:bg-gray-100 transition-colors">CANCEL</button>
+                        <button type="submit" class="w-full sm:w-auto bg-black text-white px-8 py-3 font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors">CONFIRM DEPLOYMENT</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Credits Modal -->
         <div v-if="showCredits" class="fixed inset-0 z-[120] bg-black/50 flex items-center justify-center p-6" @click="showCredits = false">
             <div class="bg-white border-2 border-black p-8 max-w-2xl w-full flex flex-col relative overflow-hidden" @click.stop>
@@ -87,7 +136,6 @@
                                 </li>
                             </ul>
                         </div>
-
                         <div>
                             <h3 class="text-xs font-bold uppercase tracking-widest opacity-60 mb-2 underline decoration-2">Core OS Template</h3>
                             <ul class="space-y-1 text-sm font-bold uppercase tracking-tight">
@@ -95,43 +143,8 @@
                                     <a href="https://universal-blue.org" target="_blank" class="hover:underline">Universal Blue</a>
                                     <span class="opacity-60 text-[10px]">Apache-2.0</span>
                                 </li>
-                                <li class="flex justify-between">
-                                    <a href="https://getaurora.dev" target="_blank" class="hover:underline">Aurora OS (Ublue)</a>
-                                    <span class="opacity-60 text-[10px]">Apache-2.0</span>
-                                </li>
                             </ul>
                         </div>
-
-                        <div>
-                            <h3 class="text-xs font-bold uppercase tracking-widest opacity-60 mb-2 underline decoration-2">Hosted Services</h3>
-                            <ul class="space-y-1 text-sm font-bold uppercase tracking-tight">
-                                <li class="flex justify-between">
-                                    <a href="https://cockpit-project.org" target="_blank" class="hover:underline">Cockpit Project</a>
-                                    <span class="opacity-60 text-[10px]">LGPL-2.1</span>
-                                </li>
-                                <li class="flex justify-between">
-                                    <a href="https://novnc.com" target="_blank" class="hover:underline">noVNC</a>
-                                    <span class="opacity-60 text-[10px]">MPL-2.0</span>
-                                </li>
-                                <li class="flex justify-between">
-                                    <a href="https://nginx.org" target="_blank" class="hover:underline">Nginx Server</a>
-                                    <span class="opacity-60 text-[10px]">BSD-2-Clause</span>
-                                </li>
-                                <li class="flex justify-between">
-                                    <a href="https://www.openssh.com" target="_blank" class="hover:underline">OpenSSH</a>
-                                    <span class="opacity-60 text-[10px]">BSD</span>
-                                </li>
-                                <li class="flex justify-between">
-                                    <a href="https://tailscale.com" target="_blank" class="hover:underline">Tailscale</a>
-                                    <span class="opacity-60 text-[10px]">BSD-3-Clause</span>
-                                </li>
-                                <li class="flex justify-between">
-                                    <a href="https://podman.io" target="_blank" class="hover:underline">Podman Engine</a>
-                                    <span class="opacity-60 text-[10px]">Apache-2.0</span>
-                                </li>
-                            </ul>
-                        </div>
-
                         <div>
                             <h3 class="text-xs font-bold uppercase tracking-widest opacity-60 mb-2 underline decoration-2">Frontend Stack</h3>
                             <ul class="space-y-1 text-sm font-bold uppercase tracking-tight">
@@ -141,10 +154,6 @@
                                 </li>
                                 <li class="flex justify-between">
                                     <a href="https://tailwindcss.com" target="_blank" class="hover:underline">Tailwind CSS</a>
-                                    <span class="opacity-60 text-[10px]">MIT</span>
-                                </li>
-                                <li class="flex justify-between">
-                                    <a href="https://microsoft.github.io/monaco-editor/" target="_blank" class="hover:underline">Monaco Editor</a>
                                     <span class="opacity-60 text-[10px]">MIT</span>
                                 </li>
                             </ul>
@@ -161,13 +170,13 @@
         <!-- Navigation -->
         <nav class="fixed w-full px-6 py-4 flex justify-between items-center z-50 bg-white border-b-2 border-black">
             <div class="text-xl font-bold tracking-tighter">NASPEASY<span class="text-xs align-super">DASHBOARD</span></div>
-            <div class="flex gap-8 text-xs font-bold uppercase tracking-widest">
-                <span>LOCAL: {% raw %}{{ localIp }}{% endraw %}</span>
-                <span>PUBLIC: {% raw %}{{ publicIp }}{% endraw %}</span>
+            <div class="flex gap-8 text-xs font-bold uppercase tracking-widest items-center">
+                <span>IP: {% raw %}{{ localIp }}{% endraw %}</span>
+                <button @click="logout" class="bg-black text-white px-4 py-1 hover:bg-gray-800 transition-colors">LOGOUT</button>
             </div>
         </nav>
 
-        <main class="pt-24 px-6 pb-12 max-w-7xl mx-auto w-full grid grid-cols-1 md:grid-cols-12 gap-8">
+        <main class="pt-24 px-6 pb-12 max-w-7xl mx-auto w-full grid grid-cols-1 md:grid-cols-12 gap-8 flex-1">
             <!-- Hero / Status -->
             <header class="md:col-span-12 border-2 border-black p-8 relative overflow-hidden bg-black text-white">
                 <div class="absolute inset-0 diagonal-stripes"></div>
@@ -176,7 +185,7 @@
                         SYSTEM<span class="text-xs align-super"> C O N T R O L</span>
                     </h1>
                     <p class="text-sm max-w-md opacity-80 uppercase tracking-widest">
-                        Centralized management interface for NAS services and infrastructure.
+                        Authorized management interface.
                     </p>
                 </div>
             </header>
@@ -184,246 +193,107 @@
             <!-- Main Content Area -->
             <section class="md:col-span-8 space-y-4">
                 <!-- Tab Switcher -->
-                <div class="flex border-b-2 border-black">
-                    <button @click="activeTab = 'services'" 
-                            class="px-6 py-2 text-sm font-bold uppercase tracking-widest transition-colors"
-                            :class="activeTab === 'services' ? 'bg-black text-white' : 'hover:bg-gray-100'">
-                        SERVICES
+                <div class="flex border-b-2 border-black overflow-x-auto whitespace-nowrap scrollbar-hide">
+                    <button v-for="tab in ['services', 'quadlets', 'proxies', 'apps']" :key="tab"
+                            @click="activeTab = tab" 
+                            class="px-6 py-2 text-xs font-bold uppercase tracking-widest transition-colors border-r-2 border-black last:border-r-0"
+                            :class="activeTab === tab ? 'bg-black text-white' : 'hover:bg-gray-100'">
+                        {% raw %}{{ tab }}{% endraw %}
                     </button>
-                    <button @click="activeTab = 'docker'" 
-                            class="px-6 py-2 text-sm font-bold uppercase tracking-widest transition-colors border-l-2 border-black"
-                            :class="activeTab === 'docker' ? 'bg-black text-white' : 'hover:bg-gray-100'">
-                        DOCKER
-                    </button>
-                    <button @click="activeTab = 'quadlets'" 
-                            class="px-6 py-2 text-sm font-bold uppercase tracking-widest transition-colors border-l-2 border-black"
-                            :class="activeTab === 'quadlets' ? 'bg-black text-white' : 'hover:bg-gray-100'">
-                        QUADLETS
-                    </button>
-                    <button @click="activeTab = 'proxies'" 
-                            class="px-6 py-2 text-sm font-bold uppercase tracking-widest transition-colors border-l-2 border-black"
-                            :class="activeTab === 'proxies' ? 'bg-black text-white' : 'hover:bg-gray-100'">
-                        PROXIES
+                    <button v-if="isAdmin" @click="activeTab = 'users'" 
+                            class="px-6 py-2 text-xs font-bold uppercase tracking-widest transition-colors border-l-2 border-black ml-auto"
+                            :class="activeTab === 'users' ? 'bg-black text-white' : 'hover:bg-gray-100'">
+                        USERS
                     </button>
                 </div>
 
                 <!-- Services Tab -->
                 <div v-if="activeTab === 'services'" class="space-y-4">
+                    <div v-for="(unit, name) in serviceMap" :key="unit" 
+                         class="border-2 border-black p-4 flex flex-col transition-all cursor-pointer group"
+                         :class="selectedUnit === unit ? 'bg-black text-white' : 'hover:bg-black hover:text-white'"
+                         @click="toggleLogs(unit)">
+                        <div class="flex flex-col sm:flex-row items-center justify-between">
+                            <div class="flex items-center gap-4 w-full">
+                                <div class="w-4 h-4 border-2 border-black group-hover:border-white shrink-0" 
+                                     :class="[getStatusClass(services[unit]), selectedUnit === unit ? 'border-white' : '']"></div>
+                                <div class="flex flex-col">
+                                    <span class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ name }}{% endraw %}</span>
+                                    <span class="text-[10px] opacity-60 uppercase">{% raw %}{{ unit }}{% endraw %}</span>
+                                </div>
+                                <div class="ml-auto sm:ml-4 text-[10px] font-bold border border-black group-hover:border-white px-2 py-0.5 uppercase"
+                                     :class="selectedUnit === unit ? 'border-white' : ''">
+                                    {% raw %}{{ services[unit] || '...' }}{% endraw %}
+                                </div>
+                            </div>
+                            <div class="flex gap-4 mt-4 sm:mt-0 w-full sm:w-auto">
+                                <button @click.stop="controlService(unit, 'start')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors" :class="selectedUnit === unit ? 'border-white' : ''">Start</button>
+                                <button @click.stop="controlService(unit, 'stop')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors" :class="selectedUnit === unit ? 'border-white' : ''">Stop</button>
+                                <button @click.stop="controlService(unit, 'restart')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors" :class="selectedUnit === unit ? 'border-white' : ''">Restart</button>
+                            </div>
+                        </div>
+                        <div v-if="selectedUnit === unit" class="mt-4 border-t border-white/20 pt-4 overflow-hidden" @click.stop>
+                            <div v-if="unit === 'tailscaled.service'" class="mb-6 p-4 border border-white/30 bg-white/5">
+                                <div class="text-[10px] font-bold uppercase tracking-widest mb-2">Tailscale Authentication</div>
+                                <div class="flex gap-2">
+                                    <input v-model="tsAuthKey" placeholder="tskey-auth-..." class="flex-1 bg-transparent border border-white/30 p-2 text-[10px] font-mono focus:outline-none focus:border-white transition-colors">
+                                    <button @click="tailscaleLogin" class="px-4 py-1 text-[10px] font-bold uppercase tracking-widest border border-white hover:bg-white hover:text-black transition-colors">Login</button>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-[10px] font-bold uppercase tracking-widest opacity-60">System Logs (Last 50 lines)</span>
+                                <button @click="fetchLogs(unit)" class="text-[10px] font-bold uppercase tracking-widest hover:underline">Reload Logs</button>
+                            </div>
+                            <pre class="text-[10px] font-mono bg-white/5 p-4 overflow-x-auto whitespace-pre-wrap max-h-64 scrollbar-thin scrollbar-thumb-white/20">{% raw %}{{ currentLogs || 'Loading logs...' }}{% endraw %}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Docker Tab (Hidden) -->
+                <div v-if="false" class="space-y-8">
                     <div class="flex justify-between items-end border-b-2 border-black pb-2">
-                        <h2 class="text-2xl font-bold uppercase tracking-tighter">SERVICE STATUS</h2>
-                        <button @click="fetchServices" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Refresh</button>
+                        <h2 class="text-2xl font-bold uppercase tracking-tighter">COMPOSE PROJECTS</h2>
+                        <div class="flex gap-4">
+                            <button @click="createNewCompose" class="text-xs font-bold uppercase tracking-widest hover:underline">Create New</button>
+                            <button @click="fetchCompose" class="text-xs font-bold uppercase tracking-widest hover:underline">Refresh</button>
+                        </div>
                     </div>
-
+                    <div v-if="composeFiles.length === 0" class="text-sm opacity-60 italic py-4 border-2 border-black border-dashed text-center">No compose files found.</div>
                     <div class="grid grid-cols-1 gap-2">
-                        <div v-for="(unit, name) in serviceMap" :key="unit" 
+                        <div v-for="file in composeFiles" :key="file" 
                              class="border-2 border-black p-4 flex flex-col transition-all cursor-pointer group"
-                             :class="selectedUnit === unit ? 'bg-black text-white' : 'hover:bg-black hover:text-white'"
-                             @click="toggleLogs(unit)">
+                             :class="selectedCompose === file ? 'bg-black text-white' : 'hover:bg-gray-50'"
+                             @click="toggleComposeLogs(file)">
                             <div class="flex flex-col sm:flex-row items-center justify-between">
-                                <div class="flex items-center gap-4 w-full">
-                                    <div class="w-4 h-4 border-2 border-black group-hover:border-white shrink-0" 
-                                         :class="[getStatusClass(services[unit]), selectedUnit === unit ? 'border-white' : '']"></div>
-                                    <div class="flex flex-col">
-                                        <span class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ name }}{% endraw %}</span>
-                                        <span class="text-[10px] opacity-60 uppercase">{% raw %}{{ unit }}{% endraw %}</span>
-                                    </div>
-                                    <div class="ml-auto sm:ml-4 text-[10px] font-bold border border-black group-hover:border-white px-2 py-0.5 uppercase"
-                                         :class="selectedUnit === unit ? 'border-white' : ''">
-                                        {% raw %}{{ services[unit] || '...' }}{% endraw %}
-                                    </div>
+                                <div class="flex flex-col">
+                                    <div class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ file }}{% endraw %}</div>
+                                    <button @click.stop="openEditor(file)" class="text-left text-[10px] font-bold uppercase hover:underline mt-1" :class="selectedCompose === file ? 'text-white' : ''">Edit Config</button>
                                 </div>
-                                
-                                <div class="flex gap-4 mt-4 sm:mt-0 w-full sm:w-auto">
-                                    <button @click.stop="controlService(unit, 'start')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors" :class="selectedUnit === unit ? 'border-white' : ''">Start</button>
-                                    <button @click.stop="controlService(unit, 'stop')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors" :class="selectedUnit === unit ? 'border-white' : ''">Stop</button>
-                                    <button @click.stop="controlService(unit, 'restart')" class="flex-1 sm:flex-none text-[10px] font-bold uppercase tracking-widest border border-black group-hover:border-white px-3 py-1 hover:bg-white hover:text-black transition-colors" :class="selectedUnit === unit ? 'border-white' : ''">Restart</button>
+                                <div class="flex gap-2 mt-4 sm:mt-0">
+                                    <button @click.stop="composeAction(file, 'up')" class="text-[10px] font-bold uppercase tracking-widest border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedCompose === file ? 'border-white hover:bg-white hover:text-black' : ''">Up</button>
+                                    <button @click.stop="composeAction(file, 'down')" class="text-[10px] font-bold uppercase tracking-widest border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedCompose === file ? 'border-white hover:bg-white hover:text-black' : ''">Down</button>
+                                    <button @click.stop="composeAction(file, 'restart')" class="text-[10px] font-bold uppercase tracking-widest border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedCompose === file ? 'border-white hover:bg-white hover:text-black' : ''">Restart</button>
                                 </div>
                             </div>
-
-                            <!-- Logs Section -->
-                            <div v-if="selectedUnit === unit" class="mt-4 border-t border-white/20 pt-4 overflow-hidden" @click.stop>
-                                <!-- Tailscale Login specifically for tailscaled.service -->
-                                <div v-if="unit === 'tailscaled.service'" class="mb-6 p-4 border border-white/30 bg-white/5">
-                                    <div class="text-[10px] font-bold uppercase tracking-widest mb-2">Tailscale Authentication</div>
-                                    <div class="flex gap-2">
-                                        <input v-model="tsAuthKey" placeholder="tskey-auth-..." class="flex-1 bg-transparent border border-white/30 p-2 text-[10px] font-mono focus:outline-none focus:border-white transition-colors">
-                                        <button @click="tailscaleLogin" class="px-4 py-1 text-[10px] font-bold uppercase tracking-widest border border-white hover:bg-white hover:text-black transition-colors">Login</button>
-                                    </div>
-                                </div>
-
-                                <div class="flex justify-between items-center mb-2">
-                                    <span class="text-[10px] font-bold uppercase tracking-widest opacity-60">System Logs (Last 50 lines)</span>
-                                    <button @click="fetchLogs(unit)" class="text-[10px] font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Reload Logs</button>
-                                </div>
-                                <pre class="text-[10px] font-mono bg-white/5 p-4 overflow-x-auto whitespace-pre-wrap max-h-64 scrollbar-thin scrollbar-thumb-white/20">{% raw %}{{ currentLogs || 'Loading logs...' }}{% endraw %}</pre>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Quadlets Tab -->
-                <div v-if="activeTab === 'quadlets'" class="space-y-8">
-                    <!-- Warning Banner -->
-                    <div v-if="!systemStatus.podman" class="border-2 border-black p-4 bg-gray-100 flex flex-col gap-2">
-                        <div class="font-bold uppercase tracking-tighter text-xl">⚠️ SYSTEM REQUIREMENT MISSING</div>
-                        <p class="text-xs uppercase font-bold opacity-70">
-                            Critical: Podman binary not found in path. Quadlets require Podman.
-                        </p>
-                        <div class="text-[10px] font-mono mt-2">RUN: sudo dnf install podman</div>
-                    </div>
-
-                    <div class="space-y-4">
-                        <div class="flex justify-between items-end border-b-2 border-black pb-2">
-                            <h2 class="text-2xl font-bold uppercase tracking-tighter">PODMAN QUADLETS</h2>
-                            <div class="flex gap-4">
-                                <button @click="deployPihole" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Deploy Pi-hole</button>
-                                <button @click="createNewQuadlet" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Create New</button>
-                                <button @click="fetchQuadlets" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Refresh</button>
-                            </div>
-                        </div>
-                        <div v-if="quadletFiles.length === 0" class="text-sm opacity-60 italic py-4 border-2 border-black border-dashed text-center">No quadlet files found in /etc/containers/systemd</div>
-                        <div class="grid grid-cols-1 gap-2">
-                            <div v-for="file in quadletFiles" :key="file" 
-                                 class="border-2 border-black p-4 flex flex-col transition-all cursor-pointer group"
-                                 :class="selectedQuadlet === file ? 'bg-black text-white' : 'hover:bg-gray-50'"
-                                 @click="toggleQuadletLogs(file)">
-                                <div class="flex flex-col sm:flex-row items-center justify-between">
-                                    <div class="flex flex-col">
-                                        <div class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ file }}{% endraw %}</div>
-                                        <div class="flex gap-4">
-                                            <button @click.stop="openQuadletEditor(file)" 
-                                                    class="text-left text-[10px] font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4 mt-1"
-                                                    :class="selectedQuadlet === file ? 'text-white' : ''">Edit File</button>
-                                            <button @click.stop="removeQuadlet(file)" 
-                                                    class="text-left text-[10px] font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4 mt-1 text-red-600"
-                                                    :class="selectedQuadlet === file ? 'text-red-400' : ''">Delete</button>
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-2 mt-4 sm:mt-0">
-                                        <div class="flex items-center gap-2 mr-4">
-                                            <div class="w-3 h-3 border border-black group-hover:border-white" :class="[getStatusClass(services[file.replace('.container', '.service')]), selectedQuadlet === file ? 'border-white' : '']"></div>
-                                            <span class="text-[10px] font-bold uppercase">{% raw %}{{ services[file.replace('.container', '.service')] || '...' }}{% endraw %}</span>
-                                        </div>
-                                        <button @click.stop="controlService(file.replace('.container', '.service'), 'start')" class="text-[10px] font-bold uppercase tracking-widest border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedQuadlet === file ? 'border-white hover:bg-white hover:text-black' : ''">Start</button>
-                                        <button @click.stop="controlService(file.replace('.container', '.service'), 'stop')" class="text-[10px] font-bold uppercase tracking-widest border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedQuadlet === file ? 'border-white hover:bg-white hover:text-black' : ''">Stop</button>
-                                    </div>
-                                </div>
-
-                                <!-- Quadlet Logs Section -->
-                                <div v-if="selectedQuadlet === file" class="mt-4 border-t border-white/20 pt-4 overflow-hidden" @click.stop>
-                                    <div class="flex justify-between items-center mb-2">
-                                        <span class="text-[10px] font-bold uppercase tracking-widest opacity-60">Service Logs (Last 50 lines)</span>
-                                        <button @click="fetchLogs(file.replace('.container', '.service'))" class="text-[10px] font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Reload Logs</button>
-                                    </div>
-                                    <pre class="text-[10px] font-mono bg-white/5 p-4 overflow-x-auto whitespace-pre-wrap max-h-64 scrollbar-thin scrollbar-thumb-white/20">{% raw %}{{ currentLogs || 'Loading logs...' }}{% endraw %}</pre>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Proxies Tab -->
-                <div v-if="activeTab === 'proxies'" class="space-y-8">
-                    <div class="space-y-4">
-                        <div class="flex justify-between items-end border-b-2 border-black pb-2">
-                            <h2 class="text-2xl font-bold uppercase tracking-tighter">NGINX PROXIES</h2>
-                            <div class="flex gap-4">
-                                <button @click="createNewProxy" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Create New</button>
-                                <button @click="fetchProxies" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Refresh</button>
-                            </div>
-                        </div>
-                        <div v-if="proxyFiles.length === 0" class="text-sm opacity-60 italic py-4 border-2 border-black border-dashed text-center">No proxy files found in /etc/nginx/conf.d</div>
-                        <div class="grid grid-cols-1 gap-2">
-                            <div v-for="file in proxyFiles" :key="file" 
-                                 class="border-2 border-black p-4 flex flex-col transition-all cursor-pointer group"
-                                 :class="selectedProxy === file ? 'bg-black text-white' : 'hover:bg-gray-50'"
-                                 @click="selectedProxy = selectedProxy === file ? null : file">
-                                <div class="flex flex-col sm:flex-row items-center justify-between">
-                                    <div class="flex flex-col">
-                                        <div class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ file }}{% endraw %}</div>
-                                        <div class="flex gap-4">
-                                            <button @click.stop="openProxyEditor(file)" 
-                                                    class="text-left text-[10px] font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4 mt-1"
-                                                    :class="selectedProxy === file ? 'text-white' : ''">Edit Config</button>
-                                            <button @click.stop="removeProxy(file)" 
-                                                    class="text-left text-[10px] font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4 mt-1 text-red-600"
-                                                    :class="selectedProxy === file ? 'text-red-400' : ''">Delete</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Docker/Podman Tab -->
-                <div v-if="activeTab === 'docker'" class="space-y-8">
-                    <!-- Warning Banner -->
-                    <div v-if="!systemStatus.podman || !systemStatus.compose" class="border-2 border-black p-4 bg-gray-100 flex flex-col gap-2">
-                        <div class="font-bold uppercase tracking-tighter text-xl">⚠️ SYSTEM REQUIREMENT MISSING</div>
-                        <p class="text-xs uppercase font-bold opacity-70">
-                            <span v-if="!systemStatus.podman" class="block">Critical: Podman binary not found in path.</span>
-                            <span v-if="!systemStatus.compose" class="block">Warning: Podman-Compose or Docker-Compose provider not found. Compose features disabled.</span>
-                        </p>
-                        <div class="text-[10px] font-mono mt-2">RUN: sudo dnf install podman podman-compose</div>
-                    </div>
-
-                    <!-- Compose Management -->
-                    <div class="space-y-4">
-                        <div class="flex justify-between items-end border-b-2 border-black pb-2">
-                            <h2 class="text-2xl font-bold uppercase tracking-tighter">COMPOSE PROJECTS</h2>
-                            <div class="flex gap-4">
-                                <button @click="createNewCompose" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Create New</button>
-                                <button @click="fetchCompose" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Refresh</button>
-                            </div>
-                        </div>
-                        <div v-if="composeFiles.length === 0" class="text-sm opacity-60 italic py-4 border-2 border-black border-dashed text-center">No compose files found in /opt/nas-dashboard/compose</div>
-                        <div class="grid grid-cols-1 gap-2">
-                            <div v-for="file in composeFiles" :key="file" 
-                                 class="border-2 border-black p-4 flex flex-col transition-all cursor-pointer group"
-                                 :class="selectedCompose === file ? 'bg-black text-white' : 'hover:bg-gray-50'"
-                                 @click="toggleComposeLogs(file)">
-                                <div class="flex flex-col sm:flex-row items-center justify-between">
-                                    <div class="flex flex-col">
-                                        <div class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ file }}{% endraw %}</div>
-                                        <button @click.stop="openEditor(file)" 
-                                                class="text-left text-[10px] font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4 mt-1"
-                                                :class="selectedCompose === file ? 'text-white' : ''">Edit Configuration</button>
-                                    </div>
-                                    <div class="flex gap-2 mt-4 sm:mt-0">
-                                        <button @click.stop="composeAction(file, 'up')" class="text-[10px] font-bold uppercase tracking-widest border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedCompose === file ? 'border-white hover:bg-white hover:text-black' : ''">Up</button>
-                                        <button @click.stop="composeAction(file, 'down')" class="text-[10px] font-bold uppercase tracking-widest border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedCompose === file ? 'border-white hover:bg-white hover:text-black' : ''">Down</button>
-                                        <button @click.stop="composeAction(file, 'restart')" class="text-[10px] font-bold uppercase tracking-widest border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedCompose === file ? 'border-white hover:bg-white hover:text-black' : ''">Restart</button>
-                                    </div>
-                                </div>
-
-                                <!-- Compose Logs Section -->
-                                <div v-if="selectedCompose === file" class="mt-4 border-t border-white/20 pt-4 overflow-hidden" @click.stop>
-                                    <div class="flex justify-between items-center mb-2">
-                                        <span class="text-[10px] font-bold uppercase tracking-widest opacity-60">Compose Logs (Last 50 lines)</span>
-                                        <button @click="fetchComposeLogs(file)" class="text-[10px] font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Reload Logs</button>
-                                    </div>
-                                    <pre class="text-[10px] font-mono bg-white/5 p-4 overflow-x-auto whitespace-pre-wrap max-h-64 scrollbar-thin scrollbar-thumb-white/20">{% raw %}{{ currentComposeLogs || 'Loading logs...' }}{% endraw %}</pre>
-                                </div>
+                            <div v-if="selectedCompose === file" class="mt-4 border-t border-white/20 pt-4 overflow-hidden" @click.stop>
+                                <pre class="text-[10px] font-mono bg-white/5 p-4 overflow-x-auto whitespace-pre-wrap max-h-64">{% raw %}{{ currentComposeLogs || 'Loading logs...' }}{% endraw %}</pre>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Running Containers -->
+                    <!-- Running Instances -->
                     <div class="space-y-4">
                         <div class="flex justify-between items-end border-b-2 border-black pb-2">
                             <h2 class="text-2xl font-bold uppercase tracking-tighter">RUNNING INSTANCES</h2>
-                            <button @click="fetchContainers" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Refresh</button>
                         </div>
                         <div class="grid grid-cols-1 gap-2">
-                            <div v-for="c in containers" :key="c.Id" class="border-2 border-black p-4 flex flex-col hover:bg-gray-50 transition-colors">
-                                <div class="flex justify-between items-center">
-                                    <span class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ c.Names[0] }}{% endraw %}</span>
-                                    <span class="text-[10px] font-bold border border-black px-2 py-0.5 uppercase" :class="c.State === 'running' ? 'bg-black text-white' : ''">{% raw %}{{ c.State }}{% endraw %}</span>
+                            <div v-for="c in containers" :key="c.Id" class="border-2 border-black p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                                <div class="flex flex-col">
+                                    <span class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ c.Names[0].replace('/', '') }}{% endraw %}</span>
+                                    <span class="text-[10px] opacity-60 uppercase">{% raw %}{{ c.Image }}{% endraw %}</span>
                                 </div>
-                                <div class="text-[10px] opacity-60 uppercase mt-1">Image: {% raw %}{{ c.Image }}{% endraw %} | Ports: {% raw %}{{ c.Ports ? c.Ports.map(p => `${p.host_port}:${p.container_port}/${p.protocol}`).join(', ') : 'None' }}{% endraw %}</div>
+                                <span class="text-[10px] font-bold border border-black px-2 py-0.5 uppercase" :class="c.State === 'running' ? 'bg-black text-white' : ''">{% raw %}{{ c.State }}{% endraw %}</span>
                             </div>
-                            <div v-if="containers.length === 0" class="text-sm opacity-60 italic text-center py-4 border-2 border-black border-dashed">No running instances</div>
                         </div>
                     </div>
 
@@ -431,17 +301,13 @@
                     <div class="space-y-4">
                         <div class="flex justify-between items-end border-b-2 border-black pb-2">
                             <h2 class="text-2xl font-bold uppercase tracking-tighter">FIREWALL RULES</h2>
-                            <button @click="fetchFirewall" class="text-xs font-bold uppercase tracking-widest hover:underline decoration-2 underline-offset-4">Refresh</button>
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            <div v-for="rule in firewallRules" :key="rule" class="text-[10px] font-bold border border-black px-2 py-1 uppercase bg-gray-100">
-                                {% raw %}{{ rule }}{% endraw %}
-                            </div>
-                            <div v-if="firewallRules.length === 0" class="text-sm opacity-60 italic">No custom rules found</div>
+                            <div v-for="rule in firewallRules" :key="rule" class="text-[10px] font-bold border border-black px-2 py-1 uppercase bg-gray-100">{% raw %}{{ rule }}{% endraw %}</div>
                         </div>
                         <div class="pt-4 flex flex-col sm:flex-row gap-2">
-                            <input v-model="newPort" placeholder="80/tcp" class="flex-1 border-2 border-black p-2 text-sm uppercase font-bold focus:outline-none">
-                            <select v-model="newDirection" class="border-2 border-black p-2 text-sm uppercase font-bold focus:outline-none bg-white">
+                            <input v-model="newPort" placeholder="80/tcp" class="mono-input sm:w-1/2">
+                            <select v-model="newDirection" class="mono-input sm:w-1/4 bg-white">
                                 <option value="IN">INCOMING</option>
                                 <option value="OUT">OUTGOING</option>
                             </select>
@@ -449,34 +315,148 @@
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Sidebar / Links -->
-            <aside class="md:col-span-4 space-y-8">
-                <div>
-                    <h2 class="text-2xl font-bold uppercase tracking-tighter border-b-2 border-black pb-2 mb-4">RESOURCES</h2>
-                    <div class="space-y-2">
-                        <a :href="'https://' + localIp + ':9090'" target="_blank" 
-                           class="block border-2 border-black p-4 hover:bg-black hover:text-white transition-all">
-                            <div class="font-bold uppercase tracking-tight">Cockpit</div>
-                            <div class="text-[10px] opacity-60">System Administration Port 9090</div>
-                        </a>
-                        <a :href="'http://' + localIp + ':6080/vnc.html'" target="_blank" 
-                           class="block border-2 border-black p-4 hover:bg-black hover:text-white transition-all">
-                            <div class="font-bold uppercase tracking-tight">noVNC</div>
-                            <div class="text-[10px] opacity-60">Remote Desktop Port 6080</div>
-                        </a>
+                <!-- Quadlets Tab -->
+                <div v-if="activeTab === 'quadlets'" class="space-y-4">
+                    <div class="flex justify-between items-end border-b-2 border-black pb-2">
+                        <h2 class="text-2xl font-bold uppercase tracking-tighter">PODMAN QUADLETS</h2>
+                        <div class="flex gap-4">
+                            <button @click="createNewQuadlet" class="text-xs font-bold uppercase hover:underline">Create New</button>
+                            <button @click="fetchQuadlets" class="text-xs font-bold uppercase hover:underline">Refresh</button>
+                        </div>
+                    </div>
+                    <div v-for="file in quadletFiles" :key="file" 
+                         class="border-2 border-black p-4 flex flex-col transition-all cursor-pointer group"
+                         :class="selectedQuadlet === file ? 'bg-black text-white' : 'hover:bg-gray-50'"
+                         @click="toggleQuadletLogs(file)">
+                        <div class="flex flex-col sm:flex-row items-center justify-between">
+                            <div class="flex flex-col">
+                                <div class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ file }}{% endraw %}</div>
+                                <div class="flex gap-4">
+                                    <button @click.stop="openQuadletEditor(file)" class="text-left text-[10px] font-bold uppercase hover:underline mt-1" :class="selectedQuadlet === file ? 'text-white' : ''">Edit File</button>
+                                    <button @click.stop="removeQuadlet(file)" class="text-left text-[10px] font-bold uppercase hover:underline mt-1 text-red-600" :class="selectedQuadlet === file ? 'text-red-400' : ''">Delete</button>
+                                </div>
+                            </div>
+                            <div class="flex gap-2 mt-4 sm:mt-0 items-center">
+                                <div class="w-3 h-3 border border-black group-hover:border-white" :class="[getStatusClass(services[file.replace('.container', '.service')]), selectedQuadlet === file ? 'border-white' : '']"></div>
+                                <button @click.stop="controlService(file.replace('.container', '.service'), 'start')" class="text-[10px] font-bold uppercase border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedQuadlet === file ? 'border-white hover:bg-white hover:text-black' : ''">Start</button>
+                                <button @click.stop="controlService(file.replace('.container', '.service'), 'stop')" class="text-[10px] font-bold uppercase border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors" :class="selectedQuadlet === file ? 'border-white hover:bg-white hover:text-black' : ''">Stop</button>
+                            </div>
+                        </div>
+                        <div v-if="selectedQuadlet === file" class="mt-4 border-t border-white/20 pt-4 overflow-hidden" @click.stop>
+                            <pre class="text-[10px] font-mono bg-white/5 p-4 overflow-x-auto whitespace-pre-wrap max-h-64">{% raw %}{{ currentLogs || 'Loading logs...' }}{% endraw %}</pre>
+                        </div>
                     </div>
                 </div>
 
+                <!-- Proxies Tab -->
+                <div v-if="activeTab === 'proxies'" class="space-y-4">
+                    <div class="flex justify-between items-end border-b-2 border-black pb-2">
+                        <h2 class="text-2xl font-bold uppercase tracking-tighter">NGINX PROXIES</h2>
+                        <div class="flex gap-4">
+                            <button @click="createNewProxy" class="text-xs font-bold uppercase hover:underline">Create New</button>
+                            <button @click="fetchProxies" class="text-xs font-bold uppercase hover:underline">Refresh</button>
+                        </div>
+                    </div>
+                    <div v-for="file in proxyFiles" :key="file" class="border-2 border-black p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                        <div class="flex flex-col">
+                            <div class="font-bold uppercase tracking-tight text-lg">{% raw %}{{ file }}{% endraw %}</div>
+                            <div class="flex gap-4">
+                                <button @click.stop="openProxyEditor(file)" class="text-[10px] font-bold uppercase hover:underline mt-1">Edit Config</button>
+                                <button @click.stop="removeProxy(file)" class="text-[10px] font-bold uppercase text-red-600 hover:underline mt-1">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Apps Tab -->
+                <div v-if="activeTab === 'apps'" class="space-y-4">
+                    <div class="flex justify-between items-end border-b-2 border-black pb-2">
+                        <h2 class="text-2xl font-bold uppercase tracking-tighter">APPLICATION SYNC</h2>
+                        <div class="flex gap-4">
+                            <button @click="createNewApp" class="text-xs font-bold uppercase hover:underline">Create App</button>
+                            <button @click="fetchApps" class="text-xs font-bold uppercase hover:underline">Refresh</button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-4 border-2 border-black p-4 bg-gray-50">
+                        <input v-model="repoUrl" placeholder="GIT REPOSITORY URL" class="mono-input flex-1">
+                        <button @click="syncApps" class="bg-black text-white px-8 py-2 font-bold uppercase hover:bg-gray-800 transition-colors">SYNC REPO</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-2">
+                        <div v-for="app in apps" :key="app.id" class="border-2 border-black p-6 hover:bg-gray-50 transition-colors">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-2xl font-bold uppercase tracking-tight">{% raw %}{{ app.name }}{% endraw %}</h3>
+                                    <p class="text-xs opacity-60 uppercase">{% raw %}{{ app.description }}{% endraw %}</p>
+                                </div>
+                                <span class="text-[10px] font-bold border border-black px-2 py-0.5 uppercase" :class="app.installed ? 'bg-black text-white' : (app.coming_soon ? 'bg-gray-200 text-gray-500 border-gray-200' : '')">
+                                    {% raw %}{{ app.coming_soon ? 'COMING SOON' : (app.installed ? 'INSTALLED' : 'AVAILABLE') }}{% endraw %}
+                                </span>
+                            </div>
+                            <div v-if="!app.coming_soon" class="flex flex-wrap justify-start gap-2 mt-4 w-full">
+                                <button v-if="!app.installed" @click="installApp(app)" class="flex-1 sm:flex-none bg-black text-white px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-gray-800 transition-colors text-center whitespace-nowrap">INSTALL</button>
+                                <button v-else @click="uninstallApp(app)" class="flex-1 sm:flex-none bg-black text-white px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-gray-800 transition-colors text-center whitespace-nowrap">UNINSTALL</button>
+                                <button @click="openAppEditor(app.id, 'json')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">MANIFEST</button>
+                                <button @click="openAppEditor(app.id, 'container')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">CONTAINER</button>
+                                <button @click="openAppEditor(app.id, 'conf')" class="flex-1 sm:flex-none border-2 border-black px-3 py-2 text-[10px] sm:text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors text-center whitespace-nowrap">PROXY</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Users Tab (Admin Only) -->
+                <div v-if="activeTab === 'users' && isAdmin" class="space-y-8">
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-end border-b-2 border-black pb-2">
+                            <h2 class="text-2xl font-bold uppercase tracking-tighter">USER MANAGEMENT</h2>
+                            <button @click="fetchUsers" class="text-xs font-bold uppercase hover:underline">Refresh</button>
+                        </div>
+                        <div class="border-2 border-black p-6 bg-gray-50">
+                            <h3 class="text-xs font-bold uppercase tracking-widest mb-4">REGISTER NEW ACCOUNT</h3>
+                            <div class="flex flex-col sm:flex-row gap-4">
+                                <input v-model="newUser.username" placeholder="USERNAME" class="mono-input sm:w-1/3">
+                                <input v-model="newUser.password" type="password" placeholder="PASSWORD" class="mono-input sm:w-1/3">
+                                <button @click="addUser" class="bg-black text-white px-8 py-2 font-bold uppercase hover:bg-gray-800 transition-colors">ADD USER</button>
+                            </div>
+                            <div v-if="userMsg" class="mt-4 text-[10px] font-bold uppercase">{% raw %}{{ userMsg }}{% endraw %}</div>
+                        </div>
+                        <div v-for="user in userList" :key="user" class="border-2 border-black p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                            <div class="flex items-center gap-4">
+                                <div class="w-2 h-2 bg-black"></div>
+                                <span class="font-bold uppercase tracking-tight">{% raw %}{{ user }}{% endraw %}</span>
+                                <span v-if="user === 'admin'" class="text-[8px] font-bold border border-black px-1">SYSTEM ROOT</span>
+                            </div>
+                            <button v-if="user !== 'admin'" @click="deleteUser(user)" class="text-[10px] font-bold uppercase text-red-600 hover:underline">Delete Account</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sidebar -->
+            <aside class="md:col-span-4 space-y-8">
                 <div class="border-2 border-black p-6 bg-gray-50 relative overflow-hidden">
                     <div class="grid-lines absolute inset-0"></div>
                     <div class="relative z-10">
-                        <h3 class="text-xl font-bold uppercase tracking-tighter mb-2">PROXIES</h3>
-                        <ul class="space-y-1 text-xs font-bold uppercase tracking-widest">
-                            <li><a href="/cockpit" class="hover:underline decoration-2 underline-offset-4">/cockpit</a></li>
-                            <li><a href="/novnc" class="hover:underline decoration-2 underline-offset-4">/novnc</a></li>
-                        </ul>
+                        <h2 class="text-xl font-bold uppercase tracking-tighter mb-4 border-b border-black pb-2">RESOURCES</h2>
+                        <div class="space-y-4">
+                            <a :href="'https://' + localIp + ':9090'" target="_blank" class="block border-2 border-black p-4 hover:bg-black hover:text-white transition-all bg-white/80">
+                                <div class="font-bold uppercase tracking-tight">Cockpit</div>
+                                <div class="text-[10px] opacity-60">System Administration</div>
+                            </a>
+                            <button @click="openNoVnc" class="block border-2 border-black p-4 hover:bg-black hover:text-white transition-all bg-white/80 w-full text-left">
+                                <div class="font-bold uppercase tracking-tight">noVNC</div>
+                                <div class="text-[10px] opacity-60">Remote Desktop</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="border-2 border-black p-6 bg-black text-white">
+                    <h2 class="text-xl font-bold uppercase tracking-tighter mb-4">SYSTEM NODE</h2>
+                    <div class="space-y-2 text-[10px] font-bold uppercase tracking-widest">
+                        <div class="flex justify-between border-b border-white/20 pb-1"><span>PODMAN</span><span>{% raw %}{{ systemStatus.podman ? 'OK' : 'MISSING' }}{% endraw %}</span></div>
+                        <div v-for="file in proxyFiles.slice(0, 5)" :key="file" class="flex justify-between border-b border-white/20 pb-1"><span>PROXY</span><span>{% raw %}{{ file.split('.')[0] }}{% endraw %}</span></div>
                     </div>
                 </div>
             </aside>
@@ -485,663 +465,12 @@
         <footer class="mt-auto border-t-2 border-black p-6 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest">
             <div class="flex gap-8">
                 <span>NASy-Peasy Dashboard</span>
-                <button @click="showCredits = true" class="hover:underline">Credits & Licenses</button>
+                <button @click="showCredits = true" class="hover:underline">Credits</button>
             </div>
             <div><a href="https://mono.layogtima.com" class="hover:underline">Mono Design System</a></div>
         </footer>
     </div>
 
-    <script>
-        const { createApp, ref, onMounted, onUnmounted, watch, nextTick } = Vue
-        createApp({
-            setup() {
-                const activeTab = ref('services')
-                const publicIp = ref('...')
-                const localIp = ref('...')
-                const services = ref({})
-                const selectedUnit = ref(null)
-                const currentLogs = ref('')
-                const showCredits = ref(false)
-                const serviceMap = {
-                    cockpit: 'cockpit.socket',
-                    novnc: 'novnc.service',
-                    nginx: 'nginx.service',
-                    sshd: 'sshd.service',
-                    tailscaled: 'tailscaled.service'
-                }
-                
-                // System check state
-                const systemStatus = ref({ podman: true, compose: true })
-
-                // Quadlet state
-                const quadletFiles = ref([])
-                const selectedQuadlet = ref(null)
-
-                // Proxy state
-                const proxyFiles = ref([])
-
-                const apps = ref([])
-                const repoUrl = ref('')
-                const isAuthenticated = ref(false)
-                const loginForm = ref({ username: '', password: '' })
-                const loginError = ref('')
-
-                const checkAuth = async () => {
-                    try {
-                        const res = await fetch('/api/auth/status')
-                        const data = await res.json()
-                        isAuthenticated.value = data.authenticated
-                    } catch (e) {
-                        isAuthenticated.value = false
-                    }
-                }
-
-                const login = async () => {
-                    loginError.value = ''
-                    try {
-                        const res = await fetch('/api/auth/login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(loginForm.value)
-                        })
-                        if (res.ok) {
-                            isAuthenticated.value = true
-                            loginForm.value = { username: '', password: '' }
-                            // Fetch initial data
-                            fetchNetwork()
-                            fetchServices()
-                        } else {
-                            const data = await res.json()
-                            loginError.value = data.error || 'Login failed'
-                        }
-                    } catch (e) {
-                        loginError.value = 'Connection error'
-                    }
-                }
-
-                const logout = async () => {
-                    try {
-                        await fetch('/api/auth/logout', { method: 'POST' })
-                        isAuthenticated.value = false
-                    } catch (e) {}
-                }
-
-                const selectedProxy = ref(null)
-
-                // Docker state
-                const containers = ref([])
-                const composeFiles = ref([])
-                const selectedCompose = ref(null)
-                const currentComposeLogs = ref('')
-                const firewallRules = ref([])
-                const newPort = ref('')
-                const newDirection = ref('IN')
-
-                // Tailscale state
-                const tsAuthKey = ref('')
-                const commandOutput = ref(null)
-
-                // Editor state
-                const editingFile = ref(null)
-                const editorType = ref('compose') // compose, quadlet, proxy, app
-                const currentAppId = ref(null)
-                const currentAppFileType = ref(null)
-                const saveStatus = ref('')
-                let editorInstance = null
-
-                let intervalId = null
-
-                const getStatusClass = (status) => {
-                    if (status === 'active') return 'bg-black'
-                    if (status === 'inactive') return 'bg-transparent'
-                    if (status === 'failed') return 'bg-gray-400 animate-pulse'
-                    return 'bg-gray-200'
-                }
-
-                const fetchNetwork = async () => {
-                    try {
-                        const [pub, loc, check] = await Promise.all([
-                            fetch('/api/public-ip').then(r => r.text()),
-                            fetch('/api/local-ip').then(r => r.text()),
-                            fetch('/api/system/check').then(r => r.json())
-                        ])
-                        publicIp.value = pub
-                        localIp.value = loc
-                        systemStatus.value = check
-                    } catch (e) {
-                        publicIp.value = "ERR"
-                        localIp.value = "ERR"
-                    }
-                }
-
-                const fetchServices = async () => {
-                    try {
-                        const res = await fetch('/api/services')
-                        if(res.ok) services.value = await res.json()
-                    } catch (e) {}
-                }
-
-                const controlService = async (unit, action) => {
-                    try {
-                        await fetch('/api/control', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ unit, action })
-                        })
-                        setTimeout(() => {
-                            fetchServices()
-                            // If it's a quadlet, fetchServices also updates its status
-                            if (selectedUnit.value === unit) fetchLogs(unit)
-                        }, 1000)
-                    } catch(e) {}
-                }
-
-                const fetchLogs = async (unit) => {
-                    currentLogs.value = ''
-                    try {
-                        const res = await fetch(`/api/logs?unit=${unit}`)
-                        if(res.ok) {
-                            currentLogs.value = await res.text()
-                        } else {
-                            currentLogs.value = 'Failed to load logs.'
-                        }
-                    } catch (e) {
-                        currentLogs.value = 'Error fetching logs.'
-                    }
-                }
-
-                const toggleLogs = (unit) => {
-                    if (selectedUnit.value === unit) {
-                        selectedUnit.value = null
-                        currentLogs.value = ''
-                    } else {
-                        selectedUnit.value = unit
-                        fetchLogs(unit)
-                    }
-                }
-
-                // Quadlet functions
-                const fetchQuadlets = async () => {
-                    try {
-                        const res = await fetch('/api/podman/quadlets')
-                        if(res.ok) quadletFiles.value = await res.json()
-                        fetchServices()
-                    } catch (e) {}
-                }
-
-                const toggleQuadletLogs = (file) => {
-                    const unit = file.replace('.container', '.service')
-                    if (selectedQuadlet.value === file) {
-                        selectedQuadlet.value = null
-                        currentLogs.value = ''
-                    } else {
-                        selectedQuadlet.value = file
-                        fetchLogs(unit)
-                    }
-                }
-
-                const removeQuadlet = async (file) => {
-                    if(!confirm(`Are you sure you want to remove ${file}?`)) return
-                    try {
-                        await fetch('/api/podman/quadlets/remove', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ file })
-                        })
-                        fetchQuadlets()
-                    } catch (e) {}
-                }
-
-                const openQuadletEditor = async (file) => {
-                    editingFile.value = file
-                    editorType.value = 'quadlet'
-                    saveStatus.value = 'Loading content...'
-                    
-                    try {
-                        const res = await fetch(`/api/podman/quadlets/read?file=${file}`)
-                        const content = res.ok ? await res.text() : ''
-                        await setupEditor(content, 'ini')
-                    } catch (e) {
-                        saveStatus.value = 'Error opening: ' + e.message
-                    }
-                }
-
-                const createNewQuadlet = () => {
-                    const name = prompt("Enter filename (e.g. webapp.container):")
-                    if(name && name.endsWith('.container')) {
-                        openQuadletEditor(name)
-                    } else if (name) {
-                        alert("Filename must end with .container")
-                    }
-                }
-
-                const deployPihole = () => {
-                    const content = `[Unit]
-Description=Pi-hole DNS Ad-blocker
-After=network-online.target
-
-[Container]
-Image=docker.io/pihole/pihole:latest
-Environment=TZ=UTC
-Environment=WEBPASSWORD=admin
-# Publish ports to the host
-PublishPort=53:53/udp
-PublishPort=53:53/tcp
-PublishPort=8081:80/tcp
-Volume=/var/lib/pihole:/etc/pihole:Z
-Volume=/var/lib/dnsmasq.d:/etc/dnsmasq.d:Z
-AutoUpdate=registry
-AddCapability=CAP_NET_ADMIN
-
-[Install]
-WantedBy=multi-user.target`
-                    openQuadletEditor('pihole.container')
-                    nextTick(() => {
-                        if(editorInstance) editorInstance.setValue(content)
-                    })
-                }
-
-                // Proxy functions
-                const fetchApps = async () => {
-                    try {
-                        const res = await fetch('/api/apps')
-                        if (res.ok) apps.value = await res.json()
-                    } catch (e) {}
-                }
-
-                const installApp = async (app) => {
-                    app.installing = true
-                    try {
-                        await fetch('/api/apps/install', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: app.id })
-                        })
-                        fetchApps()
-                    } catch (e) {
-                        alert('Install failed')
-                    } finally {
-                        app.installing = false
-                    }
-                }
-
-                const uninstallApp = async (app) => {
-                    if(!confirm(`Uninstall ${app.name}?`)) return
-                    app.installing = true
-                    try {
-                        await fetch('/api/apps/uninstall', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: app.id })
-                        })
-                        fetchApps()
-                    } catch (e) {
-                        alert('Uninstall failed')
-                    } finally {
-                        app.installing = false
-                    }
-                }
-
-                const openAppEditor = async (appId, fileType) => {
-                    editingFile.value = `${appId} [${fileType}]`
-                    editorType.value = 'app'
-                    currentAppId.value = appId
-                    currentAppFileType.value = fileType
-                    saveStatus.value = 'Loading content...'
-
-                    try {
-                        const res = await fetch(`/api/apps/read?id=${appId}&type=${fileType}`)
-                        const content = res.ok ? await res.text() : ''
-                        let lang = 'yaml'
-                        if (fileType === 'json') lang = 'json'
-                        if (fileType === 'container') lang = 'ini'
-                        if (fileType === 'conf') lang = 'nginx'
-                        await setupEditor(content, lang)
-                    } catch (e) {
-                        saveStatus.value = 'Error opening: ' + e.message
-                    }
-                }
-
-                const createNewApp = async () => {
-                    const id = prompt("Enter new App ID (lowercase, no spaces):")
-                    if (!id) return
-                    if (!/^[a-z0-9-]+$/.test(id)) {
-                        alert("Invalid ID format. Use only lowercase letters, numbers, and hyphens.")
-                        return
-                    }
-                    try {
-                        const res = await fetch('/api/apps/create', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id })
-                        })
-                        if (res.ok) {
-                            fetchApps()
-                            openAppEditor(id, 'json')
-                        } else {
-                            const err = await res.text()
-                            alert('Create failed: ' + err)
-                        }
-                    } catch (e) {
-                        alert('Create failed')
-                    }
-                }
-
-                const syncApps = async () => {
-                    if(!repoUrl.value) return
-                    try {
-                        await fetch('/api/apps/sync', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ url: repoUrl.value })
-                        })
-                        fetchApps()
-                        repoUrl.value = ''
-                    } catch (e) {
-                        alert('Sync failed')
-                    }
-                }
-
-                const fetchProxies = async () => {
-                    try {
-                        const res = await fetch('/api/nginx/proxies')
-                        if(res.ok) proxyFiles.value = await res.json()
-                    } catch (e) {}
-                }
-
-                const removeProxy = async (file) => {
-                    if(!confirm(`Are you sure you want to remove ${file}?`)) return
-                    try {
-                        await fetch('/api/nginx/proxies/remove', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ file })
-                        })
-                        fetchProxies()
-                    } catch (e) {}
-                }
-
-                const openProxyEditor = async (file) => {
-                    editingFile.value = file
-                    editorType.value = 'proxy'
-                    saveStatus.value = 'Loading content...'
-                    
-                    try {
-                        const res = await fetch(`/api/nginx/proxies/read?file=${file}`)
-                        const content = res.ok ? await res.text() : ''
-                        await setupEditor(content, 'nginx')
-                    } catch (e) {
-                        saveStatus.value = 'Error opening: ' + e.message
-                    }
-                }
-
-                const createNewProxy = () => {
-                    const name = prompt("Enter filename (e.g. pihole.conf):")
-                    if(name && name.endsWith('.conf')) {
-                        openProxyEditor(name)
-                    } else if (name) {
-                        alert("Filename must end with .conf")
-                    }
-                }
-
-                // Docker functions
-                const fetchContainers = async () => {
-                    try {
-                        const res = await fetch('/api/podman/containers')
-                        if(res.ok) containers.value = await res.json()
-                    } catch (e) {}
-                }
-
-                const fetchCompose = async () => {
-                    try {
-                        const res = await fetch('/api/podman/compose')
-                        if(res.ok) composeFiles.value = await res.json()
-                    } catch (e) {}
-                }
-
-                const fetchComposeLogs = async (file) => {
-                    currentComposeLogs.value = ''
-                    try {
-                        const res = await fetch(`/api/podman/compose/logs?file=${file}`)
-                        if(res.ok) {
-                            currentComposeLogs.value = await res.text()
-                        } else {
-                            currentComposeLogs.value = 'Failed to load logs.'
-                        }
-                    } catch (e) {
-                        currentComposeLogs.value = 'Error fetching logs.'
-                    }
-                }
-
-                const toggleComposeLogs = (file) => {
-                    if (selectedCompose.value === file) {
-                        selectedCompose.value = null
-                        currentComposeLogs.value = ''
-                    } else {
-                        selectedCompose.value = file
-                        fetchComposeLogs(file)
-                    }
-                }
-
-                const composeAction = async (file, action) => {
-                    try {
-                        await fetch('/api/podman/compose/action', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ file, action })
-                        })
-                        setTimeout(() => {
-                            fetchContainers()
-                            if (selectedCompose.value === file) fetchComposeLogs(file)
-                        }, 2000)
-                    } catch (e) {}
-                }
-
-                const fetchFirewall = async () => {
-                    try {
-                        const res = await fetch('/api/firewall/rules')
-                        if(res.ok) firewallRules.value = await res.json()
-                    } catch (e) {}
-                }
-
-                const addFirewall = async () => {
-                    if(!newPort.value) return
-                    try {
-                        const res = await fetch('/api/firewall/add', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ port: newPort.value, direction: newDirection.value })
-                        })
-                        if(res.ok) {
-                            newPort.value = ''
-                            fetchFirewall()
-                        }
-                    } catch (e) {}
-                }
-
-                const tailscaleLogin = async () => {
-                    if(!tsAuthKey.value) return
-                    commandOutput.value = "Running 'tailscale up'..."
-                    try {
-                        const res = await fetch('/api/tailscale/up', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ authkey: tsAuthKey.value })
-                        })
-                        const data = await res.json()
-                        commandOutput.value = data.output
-                        if(res.ok) {
-                            tsAuthKey.value = ''
-                            fetchServices()
-                        }
-                    } catch (e) {
-                        commandOutput.value = "Error: " + e.message
-                    }
-                }
-
-                // Editor functions
-                const createNewCompose = () => {
-                    const name = prompt("Enter filename (e.g. app.yml):")
-                    if(name && (name.endsWith('.yml') || name.endsWith('.yaml'))) {
-                        openEditor(name)
-                    } else if (name) {
-                        alert("Filename must end with .yml or .yaml")
-                    }
-                }
-
-                const setupEditor = async (content, language = 'yaml') => {
-                    await nextTick();
-                    if (typeof require === 'undefined') {
-                        saveStatus.value = 'Monaco loader missing';
-                        return;
-                    }
-
-                    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-                    return new Promise((resolve) => {
-                        require(['vs/editor/editor.main'], function () {
-                            const container = document.getElementById('monaco-container');
-                            if (!container) {
-                                saveStatus.value = 'Editor container missing';
-                                resolve(false);
-                                return;
-                            }
-                            
-                            if(editorInstance) editorInstance.dispose();
-                            editorInstance = monaco.editor.create(container, {
-                                value: content,
-                                language: language,
-                                theme: 'vs-dark',
-                                automaticLayout: true,
-                                fontFamily: 'Space Mono',
-                                fontSize: 12,
-                                minimap: { enabled: false }
-                            });
-
-                            editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-                                saveFile();
-                            });
-                            saveStatus.value = '';
-                            resolve(true);
-                        });
-                    });
-                }
-
-                const openEditor = async (file) => {
-                    editingFile.value = file;
-                    editorType.value = 'compose';
-                    saveStatus.value = 'Loading content...';
-                    
-                    try {
-                        const res = await fetch(`/api/files/read?file=${file}`);
-                        const content = res.ok ? await res.text() : '';
-                        await setupEditor(content, 'yaml');
-                    } catch (e) {
-                        saveStatus.value = 'Error opening: ' + e.message;
-                    }
-                }
-
-                const saveFile = async () => {
-                    if(!editorInstance || !editingFile.value) return
-                    saveStatus.value = 'Saving...'
-                    let endpoint = '/api/files/save'
-                    let payload = { file: editingFile.value, content: editorInstance.getValue() }
-
-                    if (editorType.value === 'quadlet') endpoint = '/api/podman/quadlets/save'
-                    if (editorType.value === 'proxy') endpoint = '/api/nginx/proxies/save'
-                    if (editorType.value === 'app') {
-                        endpoint = '/api/apps/save'
-                        payload = {
-                            id: currentAppId.value,
-                            type: currentAppFileType.value,
-                            content: editorInstance.getValue()
-                        }
-                    }
-                    
-                    try {
-                        const res = await fetch(endpoint, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        })
-                        if(res.ok) {
-                            saveStatus.value = 'Saved successfully'
-                            setTimeout(() => saveStatus.value = '', 2000)
-                            if(editorType.value === 'quadlet') fetchQuadlets()
-                            else if(editorType.value === 'proxy') fetchProxies()
-                            else if(editorType.value === 'app') fetchApps()
-                            else fetchCompose()
-                        } else {
-                            const err = await res.text()
-                            saveStatus.value = 'Error: ' + err
-                        }
-                    } catch (e) {
-                        saveStatus.value = 'Error saving'
-                    }
-                }
-
-                const closeEditor = () => {
-                    if(editorInstance) {
-                        editorInstance.dispose()
-                        editorInstance = null
-                    }
-                    editingFile.value = null
-                    editorType.value = 'compose'
-                }
-
-                watch(activeTab, (newTab) => {
-                    if(newTab === 'docker') {
-                        fetchContainers()
-                        fetchCompose()
-                        fetchFirewall()
-                    } else if (newTab === 'quadlets') {
-                        fetchQuadlets()
-                    } else if (newTab === 'proxies') {
-                        fetchProxies()
-                    } else if (newTab === 'apps') {
-                        fetchApps()
-                    } else {
-                        fetchServices()
-                    }
-                })
-
-                onMounted(() => {
-                    checkAuth()
-                    if (isAuthenticated.value) {
-                        fetchNetwork()
-                        fetchServices()
-                    }
-                    intervalId = setInterval(() => {
-                        if (!isAuthenticated.value) return;
-                        if(activeTab.value === 'services') fetchServices()
-                        if(activeTab.value === 'docker' && !editingFile.value) fetchContainers()
-                        if(activeTab.value === 'quadlets' && !editingFile.value) fetchQuadlets()
-                        if(activeTab.value === 'proxies' && !editingFile.value) fetchProxies()
-                        if(activeTab.value === 'apps') fetchApps()
-                    }, 5000)
-                })
-
-                onUnmounted(() => { if (intervalId) clearInterval(intervalId) })
-
-                return { 
-                    activeTab, publicIp, localIp, services, serviceMap, 
-                    getStatusClass, controlService, fetchServices, 
-                    selectedUnit, currentLogs, toggleLogs, fetchLogs,
-                    containers, composeFiles, firewallRules, newPort, newDirection,
-                    fetchContainers, fetchCompose, composeAction, fetchFirewall, addFirewall,
-                    editingFile, saveStatus, openEditor, saveFile, closeEditor, createNewCompose,
-                    quadletFiles, selectedQuadlet, fetchQuadlets, toggleQuadletLogs,
-                    removeQuadlet, openQuadletEditor, createNewQuadlet, deployPihole,
-                    proxyFiles, selectedProxy, fetchProxies, removeProxy, openProxyEditor, createNewProxy,
-                    tsAuthKey, commandOutput, tailscaleLogin,
-
-                    apps, repoUrl, fetchApps, installApp, uninstallApp, syncApps, openAppEditor, createNewApp,
-                    isAuthenticated, loginForm, loginError, login, logout, checkAuth,
-
-                    selectedCompose, currentComposeLogs, fetchComposeLogs, toggleComposeLogs,
-                    systemStatus, showCredits
-                }
-            }
-        }).mount('#app')
-    </script>
+    <script src="/static/script.js"></script>
 </body>
 </html>
